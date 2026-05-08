@@ -9,3 +9,14 @@ BEGIN
     VALUES (p_vm_name, p_ipv4);
 END;
 $$;
+
+CREATE OR REPLACE PROCEDURE core.bulk_insert_minimal_vms(
+    p_vms_data TABLE (vm_name VARCHAR(255), ipv4 VARCHAR(55))
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO core.vms (vm_name, ipv4)
+    SELECT vm_name, ipv4 FROM p_vms_data;
+END;
+$$;
