@@ -72,3 +72,13 @@ CREATE TABLE core.vm_special_contexts (
     abbr    varchar(2) NOT NULL UNIQUE,
     description text
 );
+
+CREATE TABLE core.os_types (
+    id      int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fullname varchar(255) not null unique,
+    name    varchar(255),
+    version varchar(255),
+    major_version varchar(55),
+    minor_version varchar(55),
+    vendor varchar(255)
+);

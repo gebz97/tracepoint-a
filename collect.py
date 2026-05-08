@@ -7,8 +7,8 @@ hosts_query = """
 SELECT 
     vm_name,
     ipv4,
-    svc,
-    env,
+    service_name,
+    environment,
     os
 FROM
     hosts

@@ -9,9 +9,6 @@ SELECT
     v.vm_name,
     v.ipv4,
     v.service                   AS vm_service_tag,
-    v.distribution,
-    v.os_version,
-    v.os_major,
     v.platform_ref              AS vm_platform_ref,
     v.cpus,
     v.memory_mb,
@@ -21,6 +18,11 @@ SELECT
     v.updated_at                AS vm_updated_at,
 
     -- lookups
+    o.fullname                  AS os,
+    o.name                      AS os_name,
+    o.version                   AS os_version,
+    o.major_version                   AS os_major_version,
+    o.minor_version                   AS os_minor_version,
     ps.name                     AS power_state,
     e.name                      AS environment,
     a.name                      AS arch,
@@ -95,6 +97,7 @@ SELECT
     t.os_version                AS template_os_version
 
 FROM core.vms v
+LEFT JOIN core.os_types           o   ON o.id    = v.os_type_id
 LEFT JOIN core.power_states       ps  ON ps.id   = v.power_state_id
 LEFT JOIN core.environments       e   ON e.id    = v.environment_id
 LEFT JOIN core.cpu_archs          a   ON a.id    = v.arch_id
