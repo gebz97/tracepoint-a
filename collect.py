@@ -9,7 +9,8 @@ SELECT
     ipv4,
     service_name,
     environment,
-    os
+    os,
+    service_name,
 FROM
     hosts
 """
