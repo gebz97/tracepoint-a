@@ -16,6 +16,7 @@ CREATE TABLE core.vms (
     cost_center_id      int             NULL REFERENCES core.cost_centers(id),
     vm_name             varchar(255)    NOT NULL UNIQUE,
     ipv4                varchar(55)     NOT NULL UNIQUE,
+    vm_uuid             varchar(55)     NULL UNIQUE,
     service             varchar(55)     NULL,
     os_type_id          int             NULL REFERENCES core.os_types(id),
     platform_ref        varchar(255)    NULL,
