@@ -253,10 +253,16 @@ def get_daemons(client: pm.SSHClient) -> list[dict]:
 def process_host(
     host: dict, creds: dict
 ) -> tuple[str, str | None, VirtualMachine] | None:
+    from datetime import datetime
+
+    def ts(step):
+        print(f"[{hostname}] {step} at {datetime.now().isoformat()}")
+
     hostname = host["host"]
     client = pm.SSHClient()
     client.set_missing_host_key_policy(pm.AutoAddPolicy())
     try:
+        ts("connect")
         client.connect(hostname, 22, creds["username"], creds["password"])
     except Exception as e:
         print(f"[{hostname}] connect failed: {e}")
@@ -270,10 +276,16 @@ def process_host(
     vm = VirtualMachine()
     vm.host = hostname
     vm.ipv4 = resolved_ip or hostname
+
+    ts("rpm")
     vm.packages = get_rpm_data(client)
+    ts("groups")
     vm.groups = get_groups(client)
+    ts("users")
     vm.users = get_users(client, vm.groups)
+    ts("daemons")
     vm.daemons = get_daemons(client)
+    ts("done")
 
     client.close()
     return hostname, resolved_ip, vm
