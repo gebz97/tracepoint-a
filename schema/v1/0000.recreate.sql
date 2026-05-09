@@ -1,3 +1,3 @@
-drop schema core cascade;
+DROP SCHEMA core CASCADE;
 
-create schema core;
+CREATE SCHEMA core;
