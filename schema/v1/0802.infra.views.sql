@@ -20,8 +20,6 @@ SELECT
     hh.memory_mb,
     hh.maintenance_mode,
     hh.metadata AS host_metadata,
-    hh.created_at AS host_created_at,
-    hh.updated_at AS host_updated_at,
     ht.name AS hypervisor_type,
     pv.name AS platform_vendor,
     hs.name AS host_status,

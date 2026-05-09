@@ -6,18 +6,14 @@ CREATE TABLE core.teams (
     team_name varchar(255) NOT NULL UNIQUE,
     description text NULL,
     email varchar(255) NULL,
-    metadata jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    metadata jsonb NULL
 );
 
 CREATE TABLE core.contacts (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     full_name varchar(255) NOT NULL,
     email varchar(255) NOT NULL UNIQUE,
-    metadata jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    metadata jsonb NULL
 );
 
 -- team members (many-to-many, a contact can be in multiple teams)
@@ -33,18 +29,14 @@ CREATE TABLE core.services (
     team_id int NOT NULL REFERENCES core.teams(id),
     service_name varchar(255) NOT NULL UNIQUE,
     description text NULL,
-    metadata jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    metadata jsonb NULL
 );
 
 CREATE TABLE core.cost_centers (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     cost_center_code varchar(55) NOT NULL UNIQUE,
     cost_center_name varchar(255) NOT NULL,
-    description text NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    description text NULL
 );
 
 CREATE TABLE core.projects (
@@ -55,9 +47,7 @@ CREATE TABLE core.projects (
     description text NULL,
     start_date date NULL,
     end_date date NULL,
-    metadata jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    metadata jsonb NULL
 );
 
 create table core.vendors (
@@ -65,7 +55,5 @@ create table core.vendors (
     name varchar(255) not null unique,
     country varchar(255),
     description text,
-    primary_contact text,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    primary_contact text
 );

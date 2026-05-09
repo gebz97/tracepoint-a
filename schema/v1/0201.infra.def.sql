@@ -6,9 +6,7 @@ CREATE TABLE core.datacenters (
     datacenter_name varchar(255) NOT NULL UNIQUE,
     location varchar(255) NULL,
     description text NULL,
-    metadata jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    metadata jsonb NULL
 );
 
 CREATE TABLE core.clusters (
@@ -20,8 +18,6 @@ CREATE TABLE core.clusters (
     load_balancing bool NOT NULL DEFAULT false,
     description text NULL,
     features jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now(),
     CONSTRAINT clusters_unique UNIQUE (datacenter_id, cluster_name)
 );
 
@@ -44,9 +40,7 @@ CREATE TABLE core.hypervisor_hosts (
     cpu_cores int NULL,
     memory_mb int8 NULL,
     maintenance_mode bool NOT NULL DEFAULT false,
-    metadata jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    metadata jsonb NULL
 );
 
 CREATE TABLE core.datastores (
@@ -61,9 +55,7 @@ CREATE TABLE core.datastores (
     thin_provisioned bool NOT NULL DEFAULT true,
     replication_enabled bool NOT NULL DEFAULT false,
     platform_ref varchar(255) NULL,
-    metadata jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    metadata jsonb NULL
 );
 
 CREATE TABLE core.datastore_hosts (
@@ -85,8 +77,6 @@ CREATE TABLE core.networks (
     dns_servers text [] NULL,
     platform_ref varchar(255) NULL,
     metadata jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now(),
     CONSTRAINT networks_unique UNIQUE (network_name, vlan_id)
 );
 
@@ -106,8 +96,6 @@ CREATE TABLE core.compute_pools (
     mem_shares int NULL,
     mem_limit_mb int8 NULL,
     platform_ref varchar(255) NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now(),
     CONSTRAINT compute_pools_unique UNIQUE (cluster_id, pool_name)
 );
 
@@ -119,7 +107,5 @@ CREATE TABLE core.templates (
     distribution varchar(255) NULL,
     os_version varchar(255) NULL,
     platform_ref varchar(255) NULL,
-    notes text NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    notes text NULL
 );

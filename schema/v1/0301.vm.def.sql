@@ -22,9 +22,7 @@ CREATE TABLE core.vms (
     cpus int NULL,
     memory_mb int8 NULL,
     storage_total_gb int8 NULL,
-    metadata jsonb NULL,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    metadata jsonb NULL
 );
 
 CREATE TABLE core.vm_disks (
@@ -35,9 +33,7 @@ CREATE TABLE core.vm_disks (
     label varchar(55) NULL,
     size_gb int8 NOT NULL,
     disk_path varchar(512) NULL,
-    boot_disk bool NOT NULL DEFAULT false,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    boot_disk bool NOT NULL DEFAULT false
 );
 
 CREATE TABLE core.vm_nics (
@@ -48,9 +44,7 @@ CREATE TABLE core.vm_nics (
     mac_address varchar(55) NULL,
     ipv4 varchar(55) NULL,
     ipv6 varchar(55) NULL,
-    connected bool NOT NULL DEFAULT true,
-    created_at timestamp NOT NULL DEFAULT now(),
-    updated_at timestamp NOT NULL DEFAULT now()
+    connected bool NOT NULL DEFAULT true
 );
 
 CREATE TABLE core.vm_snapshots (
@@ -61,6 +55,5 @@ CREATE TABLE core.vm_snapshots (
     description text NULL,
     size_gb int8 NULL,
     quiesced bool NOT NULL DEFAULT false,
-    platform_ref varchar(255) NULL,
-    created_at timestamp NOT NULL DEFAULT now()
+    platform_ref varchar(255) NULL
 );

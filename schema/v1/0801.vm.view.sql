@@ -14,8 +14,6 @@ SELECT
     v.memory_mb,
     v.storage_total_gb,
     v.metadata AS vm_metadata,
-    v.created_at AS vm_created_at,
-    v.updated_at AS vm_updated_at,
     -- lookups
     o.fullname AS os,
     o.name AS os_name,
@@ -116,8 +114,6 @@ SELECT
     vd.size_gb AS disk_size_gb,
     vd.disk_path,
     vd.boot_disk,
-    vd.created_at AS disk_created_at,
-    vd.updated_at AS disk_updated_at,
     df.name AS disk_format,
     -- vm
     v.id AS vm_id,
@@ -157,8 +153,6 @@ SELECT
     vn.ipv4 AS nic_ipv4,
     vn.ipv6 AS nic_ipv6,
     vn.connected,
-    vn.created_at AS nic_created_at,
-    vn.updated_at AS nic_updated_at,
     at.name AS adapter_type,
     -- vm
     v.id AS vm_id,
@@ -195,7 +189,6 @@ SELECT
     s.size_gb AS snapshot_size_gb,
     s.quiesced,
     s.platform_ref AS snapshot_platform_ref,
-    s.created_at AS snapshot_created_at,
     -- parent snapshot
     sp.id AS parent_snapshot_id,
     sp.snapshot_name AS parent_snapshot_name,
@@ -229,8 +222,6 @@ SELECT
     ds.replication_enabled,
     ds.platform_ref AS datastore_platform_ref,
     ds.metadata AS datastore_metadata,
-    ds.created_at AS datastore_created_at,
-    ds.updated_at AS datastore_updated_at,
     dst.name AS datastore_type,
     -- datacenter
     dc.id AS datacenter_id,
@@ -265,8 +256,6 @@ SELECT
     n.dns_servers,
     n.platform_ref AS network_platform_ref,
     n.metadata AS network_metadata,
-    n.created_at AS network_created_at,
-    n.updated_at AS network_updated_at,
     nt.name AS network_type,
     -- attached host count
     (
