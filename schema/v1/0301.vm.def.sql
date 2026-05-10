@@ -9,9 +9,7 @@ CREATE TABLE core.vms (
     power_state_id int NULL REFERENCES core.power_states(id),
     arch_id int NULL REFERENCES core.cpu_archs(id),
     environment_id int NULL REFERENCES core.environments(id),
-    service_id int NULL REFERENCES core.services(id),
     team_id int NULL REFERENCES core.teams(id),
-    project_id int NULL REFERENCES core.projects(id),
     cost_center_id int NULL REFERENCES core.cost_centers(id),
     vm_name varchar(255) NOT NULL UNIQUE,
     ipv4 varchar(55) NOT NULL UNIQUE,
@@ -56,4 +54,14 @@ CREATE TABLE core.vm_snapshots (
     size_gb int8 NULL,
     quiesced bool NOT NULL DEFAULT false,
     platform_ref varchar(255) NULL
+);
+
+CREATE TABLE core.service_vms (
+    service_id int references core.services(id),
+    vm_id int references core.vms(id)
+);
+
+CREATE TABLE core.project_vms (
+    project_id int references core.projects(id),
+    vm_id int references core.vms(id)
 );
