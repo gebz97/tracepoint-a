@@ -11,15 +11,18 @@ CREATE TABLE core.vms (
     environment_id int NULL REFERENCES core.environments(id),
     team_id int NULL REFERENCES core.teams(id),
     cost_center_id int NULL REFERENCES core.cost_centers(id),
+    os_id int NULL REFERENCES core.operating_systems(id),
+    vm_status int references core.vm_status_types(id),
     vm_name varchar(255) NOT NULL UNIQUE,
     ipv4 varchar(55) NOT NULL UNIQUE,
     vm_uuid varchar(55) NULL UNIQUE,
     service varchar(55) NULL,
-    os_type_id int NULL REFERENCES core.os_types(id),
     platform_ref varchar(255) NULL,
     cpus int NULL,
     memory_mb int8 NULL,
     storage_total_gb int8 NULL,
+    has_backup boolean,
+    has_dr boolean,
     metadata jsonb NULL
 );
 
