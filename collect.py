@@ -705,8 +705,8 @@ def persist_results(
 
 
 def main():
-    db_creds = read_vault("tracepoint-a", "access/db")
-    ssh_creds = read_vault("tracepoint-a", "access/ssh")
+    db_creds = read_vault("tracepoint-a", "tpa/access/db")
+    ssh_creds = read_vault("tracepoint-a", "tpa/access/ssh")
     hosts = read_csv("hosts.csv")
 
     results = process_hosts(hosts, ssh_creds)
