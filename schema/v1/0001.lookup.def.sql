@@ -72,7 +72,7 @@ CREATE TABLE core.vm_special_contexts (
     description text
 );
 
-CREATE TABLE core.os_types (
+CREATE TABLE core.operating_systems (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     fullname varchar(255) not null unique,
     name varchar(255),
@@ -86,4 +86,4 @@ create table core.vm_status_types (
     id int generated always as identity primary key,
     name varchar(55),
     abbr varchar(1)
-)
+);

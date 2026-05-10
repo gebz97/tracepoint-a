@@ -1,26 +1,135 @@
 #!/usr/bin/env python3
-import json
-import socket
-import logging
-from dataclasses import dataclass, field
-from csv import DictReader
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
-
 import paramiko as pm
 import psycopg
+import socket
+from dataclasses import dataclass, field
 from psycopg.rows import dict_row
-
 from init import read_vault
+from csv import DictReader
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-log = logging.getLogger(__name__)
+TPA_DOCUMENTATION="""
+DDL SCHEMA:
+CREATE TABLE core.vms (
+    id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    hypervisor_host_id int REFERENCES core.hypervisor_hosts(id),
+    compute_pool_id int REFERENCES core.compute_pools(id),
+    power_state_id int REFERENCES core.power_states(id),
+    cost_center_id int REFERENCES core.cost_centers(id),
+    team_id int REFERENCES core.teams(id),
+    environment_id int REFERENCES core.environments(id),
+    service_id int references core.services(id),
+    arch_id int NULL REFERENCES core.cpu_archs(id),
+    os_id int NULL REFERENCES core.operating_systems(id),
+    vm_status int references core.vm_status_types(id),
+    vm_name varchar(255) NOT NULL UNIQUE,
+    ipv4 varchar(55) NOT NULL UNIQUE,
+    shortname varchar(255) unique,
+    fqdn varchar(255) unique,
+    vm_uuid varchar(55) NULL UNIQUE,
+    cpus int NULL,
+    memory_mb int8 NULL,
+    storage_total_gb int8 NULL,
+    has_backup boolean,
+    has_dr boolean,
+    kernel varchar(255),
+    metadata jsonb NULL
+);
 
-TPA_DOCUMENTATION = """
-...
+CREATE TABLE core.vm_disks (
+    id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    vm_id int NOT NULL REFERENCES core.vms(id),
+    datastore_id int NOT NULL REFERENCES core.datastores(id),
+    disk_format_id int NULL REFERENCES core.disk_formats(id),
+    label varchar(55) NULL,
+    size_gb int8 NOT NULL,
+    disk_path varchar(512) NULL,
+    boot_disk bool NOT NULL DEFAULT false
+);
+
+CREATE TABLE core.vm_nics (
+    id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    vm_id int NOT NULL REFERENCES core.vms(id),
+    network_id int NOT NULL REFERENCES core.networks(id),
+    adapter_type_id int NULL REFERENCES core.adapter_types(id),
+    mac_address varchar(55) NULL,
+    ipv4 varchar(55) NULL,
+    ipv6 varchar(55) NULL,
+    connected bool NOT NULL DEFAULT true
+);
+
+CREATE TABLE core.vm_groups (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    vm_id INT NOT NULL REFERENCES core.vms(id) ON DELETE CASCADE,
+    name VARCHAR(55) NOT NULL,
+    gid INT,
+    description TEXT,
+    UNIQUE(vm_id, name)
+);
+
+CREATE TABLE core.vm_users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    vm_id INT NOT NULL REFERENCES core.vms(id) ON DELETE CASCADE,
+    name VARCHAR(55) NOT NULL,
+    uid INT NOT NULL,
+    pgroup VARCHAR(55) NOT NULL,
+    groups VARCHAR(55)[] NOT NULL,
+    gid INT,
+    gids INT[],
+    has_sudo BOOLEAN,
+    description TEXT,
+    UNIQUE(vm_id, name),
+    UNIQUE(vm_id, uid)
+);
+
+CREATE TABLE core.daemons (
+    id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    vm_id int NOT NULL REFERENCES core.vms(id),
+    daemon_name varchar(255) NOT NULL,
+    start_user varchar(255),
+    start_group varchar(255),
+    unit_file_path varchar(1024),
+    service_type varchar(50),
+    service_state varchar(50),
+    service_sub_state varchar(50),
+    exec_start text,
+    exec_stop text,
+    exec_reload text,
+    restart_policy varchar(50),
+    restart_sec int,
+    timeout_sec int,
+    working_directory varchar(1024),
+    wants text[],
+    requires text[],
+    after text[],
+    before text[],
+    enabled boolean DEFAULT false,
+    active boolean DEFAULT false,
+    metadata jsonb NULL,
+    constraint unique_daemons_vm_daemon unique (vm_id, daemon_name)
+);
+
+CREATE TABLE core.software_licenses (
+    id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name varchar not null unique,
+    shortname text unique
+);
+
+CREATE TABLE core.software_packages (
+    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fullname varchar(511) not null unique,
+    name varchar(255),
+    version varchar(255),
+    arch varchar(15),
+    license_id int references core.software_licenses(id),
+    vendor int references core.vendors(id)
+);
+
+create table core.vm_packages (
+    vm_id int references core.vms(id),
+    package_id bigint references core.software_packages(id),
+    constraint pk_vm_pkgs primary key (vm_id, package_id)
+);
 """
 
 MAX_WORKERS = 32
@@ -59,14 +168,81 @@ SYSTEMCTL_SHOW_PROPS = [
 ]
 
 
-# ── dataclasses ───────────────────────────────────────────────────────────────
+@dataclass
+class Disk:
+    disk_format: str = ""
+    label: str = ""
+    size_gb: int
+    path: str = ""
+    boot_disk: bool = False
+
+
+@dataclass
+class NetworkInterface:
+    network: str = ""
+    adapter_type: str = ""
+    mac_address: str = ""
+    ipv4: str = ""
+    ipv6: str = ""
+    connected: bool = True
+
+
+@dataclass
+class SoftwarePackage:
+    fullname: str = ""
+    name: str = ""
+    version: str = ""
+    arch: str = ""
+    license: str = ""
+    vendor: str = ""
+
+
+@dataclass
+class Group:
+    name: str = ""
+    gid: str = ""
+    description: str = ""
+    users: list[str] = field(default_factory=list)
+
+
+@dataclass
+class User:
+    name: str = ""
+    uid: int
+    group: str = ""    
+    groups: list[str] = field(default_factory=list)
+    gid: int
+    gids: list[int] = field(default_factory=list)
+    has_sudo: bool = False
+    description: str = ""
+
+
+@dataclass
+class Daemon:
+    name: str = ""
+    start_user: str = ""
+    start_group: str = ""
+    unit_file_path: str = ""
+    service_type: str = ""
+    service_state: str = ""
+    service_sub_state: str = ""
+    exec_start: str = ""
+    exec_stop: str = ""
+    exec_reload: str = ""
+    restart_policy: str = ""
+    restart_sec: int
+    timeout_sec: int
+    working_directory: str = ""
+    wants: list[str] = field(default_factory=list)
+    requires: list[str] = field(default_factory=list)
+    after: list[str] = field(default_factory=list)
+    before: list[str] = field(default_factory=list)
+    active: bool
+    enabled: bool
 
 
 @dataclass
 class VirtualMachine:
-    cpus: int = 0
-    memory_mb: int = 0
-    storage_total_gb: int = 0
     host: str = ""
     ipv4: str = ""
     shortname: str = ""
@@ -77,15 +253,16 @@ class VirtualMachine:
     os: str = ""
     status: str = ""
     platform: str = ""
-    kernel: str = ""
     has_backup: bool = False
     has_dr: bool = False
+    cpus: int
+    memory_mb: int
+    storage_total_gb: int
+    kernel: str = ""
     packages: list[dict] = field(default_factory=list)
     users: list[dict] = field(default_factory=list)
     groups: list[dict] = field(default_factory=list)
     daemons: list[dict] = field(default_factory=list)
-    disks: list[dict] = field(default_factory=list)
-    nics: list[dict] = field(default_factory=list)
 
 
 # ── collection ────────────────────────────────────────────────────────────────
@@ -96,31 +273,8 @@ def read_csv(file) -> list[dict]:
         return list(DictReader(f))
 
 
-def get_vm_info(client: pm.SSHClient) -> dict:
-    commands = {
-        "hostname_f": "hostname -f 2>/dev/null || hostname",
-        "hostname_s": "hostname -s 2>/dev/null || hostname",
-        "kernel": "uname -r",
-        "arch": "uname -m",
-        "cpus": "nproc",
-        "memory_kb": "awk '/MemTotal/ {print $2}' /proc/meminfo",
-        "storage_gb": "lsblk -d -b -o SIZE -n 2>/dev/null | awk '{s+=$1} END {printf \"%d\", s/1024/1024/1024}'",
-        "os": "cat /etc/os-release 2>/dev/null | grep '^PRETTY_NAME=' | cut -d= -f2- | tr -d '\"'",
-    }
-    out = {}
-    for key, cmd in commands.items():
-        _, stdout, _ = client.exec_command(cmd)
-        out[key] = stdout.read().decode().strip()
-    return out
-
-
 def get_rpm_data(client: pm.SSHClient) -> list[dict]:
-    _, stdout, stderr = client.exec_command(f'rpm -qa --queryformat "{RPM_FMT}\n"')
-    exit_code = stdout.channel.recv_exit_status()
-    if exit_code != 0:
-        raise RuntimeError(
-            f"rpm -qa failed (exit {exit_code}): {stderr.read().decode()}"
-        )
+    _, stdout, _ = client.exec_command(f'rpm -qa --queryformat "{RPM_FMT}\n"')
     rows = []
     for line in stdout:
         line = line.strip()
@@ -128,19 +282,13 @@ def get_rpm_data(client: pm.SSHClient) -> list[dict]:
             continue
         parts = line.split(";", len(RPM_FIELDS) - 1)
         if len(parts) != len(RPM_FIELDS):
-            log.warning("Malformed rpm line, skipping: %r", line)
             continue
         rows.append(dict(zip(RPM_FIELDS, parts)))
     return rows
 
 
 def get_groups(client: pm.SSHClient) -> list[dict]:
-    _, stdout, stderr = client.exec_command("cat /etc/group")
-    exit_code = stdout.channel.recv_exit_status()
-    if exit_code != 0:
-        raise RuntimeError(
-            f"cat /etc/group failed (exit {exit_code}): {stderr.read().decode()}"
-        )
+    _, stdout, _ = client.exec_command("cat /etc/group")
     groups = []
     for line in stdout:
         line = line.strip()
@@ -162,12 +310,7 @@ def get_groups(client: pm.SSHClient) -> list[dict]:
 def get_users(client: pm.SSHClient, groups: list[dict]) -> list[dict]:
     gid_to_name = {g["gid"]: g["name"] for g in groups if g["gid"] is not None}
 
-    _, stdout, stderr = client.exec_command("cat /etc/passwd")
-    exit_code = stdout.channel.recv_exit_status()
-    if exit_code != 0:
-        raise RuntimeError(
-            f"cat /etc/passwd failed (exit {exit_code}): {stderr.read().decode()}"
-        )
+    _, stdout, _ = client.exec_command("cat /etc/passwd")
     passwd_lines = [l.strip() for l in stdout if l.strip() and not l.startswith("#")]
 
     _, stdout, _ = client.exec_command("cat /etc/group")
@@ -220,93 +363,6 @@ def get_users(client: pm.SSHClient, groups: list[dict]) -> list[dict]:
     return users
 
 
-def get_disks(client: pm.SSHClient) -> list[dict]:
-    _, stdout, stderr = client.exec_command(
-        "lsblk -J -b -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE,LABEL 2>/dev/null"
-    )
-    exit_code = stdout.channel.recv_exit_status()
-    raw = stdout.read().decode()
-    if exit_code != 0 or not raw.strip():
-        log.warning("lsblk failed or returned nothing, skipping disks")
-        return []
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        log.warning("lsblk JSON parse error: %s", e)
-        return []
-
-    disks = []
-
-    def _walk(devices):
-        for dev in devices:
-            dtype = dev.get("type", "")
-            if dtype not in ("disk", "part"):
-                if "children" in dev:
-                    _walk(dev["children"])
-                continue
-            size_bytes = dev.get("size")
-            size_gb = int(size_bytes) // (1024**3) if size_bytes else 0
-            mountpoint = dev.get("mountpoint") or ""
-            boot_disk = mountpoint in ("/", "/boot", "/boot/efi")
-            disks.append(
-                {
-                    "disk_format": dev.get("fstype") or None,
-                    "label": dev.get("label") or dev.get("name") or None,
-                    "size_gb": size_gb,
-                    "disk_path": f"/dev/{dev['name']}" if dev.get("name") else None,
-                    "boot_disk": boot_disk,
-                }
-            )
-            if "children" in dev:
-                _walk(dev["children"])
-
-    _walk(data.get("blockdevices", []))
-    return disks
-
-
-def get_nics(client: pm.SSHClient) -> list[dict]:
-    _, stdout, stderr = client.exec_command("ip -j addr 2>/dev/null")
-    exit_code = stdout.channel.recv_exit_status()
-    raw = stdout.read().decode()
-    if exit_code != 0 or not raw.strip():
-        log.warning("ip -j addr failed or returned nothing, skipping NICs")
-        return []
-
-    try:
-        ifaces = json.loads(raw)
-    except json.JSONDecodeError as e:
-        log.warning("ip addr JSON parse error: %s", e)
-        return []
-
-    nics = []
-    for iface in ifaces:
-        ifname = iface.get("ifname", "")
-        if ifname == "lo":
-            continue
-        mac = iface.get("address") or None
-        ipv4 = None
-        ipv6 = None
-        for addr_info in iface.get("addr_info", []):
-            family = addr_info.get("family")
-            local = addr_info.get("local")
-            if family == "inet" and not ipv4:
-                prefix = addr_info.get("prefixlen", "")
-                ipv4 = f"{local}/{prefix}" if prefix else local
-            elif family == "inet6" and not ipv6:
-                prefix = addr_info.get("prefixlen", "")
-                ipv6 = f"{local}/{prefix}" if prefix else local
-        nics.append(
-            {
-                "mac_address": mac,
-                "ipv4": ipv4,
-                "ipv6": ipv6,
-                "connected": "UP" in iface.get("flags", []),
-            }
-        )
-    return nics
-
-
 def _parse_usec(val: str) -> int | None:
     if not val or val in ("0", "infinity"):
         return None
@@ -344,11 +400,6 @@ def get_daemons(client: pm.SSHClient) -> list[dict]:
     _, stdout, _ = client.exec_command(
         "systemctl list-units --type=service --all --no-legend --no-pager --plain 2>/dev/null"
     )
-    exit_code = stdout.channel.recv_exit_status()
-    if exit_code != 0:
-        log.warning("systemctl list-units failed (exit %d)", exit_code)
-        return []
-
     unit_names = []
     for line in stdout:
         parts = line.split()
@@ -413,109 +464,42 @@ def get_daemons(client: pm.SSHClient) -> list[dict]:
 def process_host(
     host: dict, creds: dict
 ) -> tuple[str, str | None, VirtualMachine] | None:
-    hostname = host["host"]
+    from datetime import datetime
 
     def ts(step):
-        log.info("[%s] %s at %s", hostname, step, datetime.now().isoformat())
+        print(f"[{hostname}] {step} at {datetime.now().isoformat()}")
 
+    hostname = host["host"]
     client = pm.SSHClient()
     client.set_missing_host_key_policy(pm.AutoAddPolicy())
     try:
         ts("connect")
-        client.connect(hostname, 22, creds["username"], creds["password"], timeout=30)
-    except pm.AuthenticationException:
-        log.error("[%s] authentication failed", hostname)
-        return None
-    except pm.SSHException as e:
-        log.error("[%s] SSH error: %s", hostname, e)
-        return None
-    except (socket.timeout, TimeoutError):
-        log.error("[%s] connection timed out", hostname)
-        return None
+        client.connect(hostname, 22, creds["username"], creds["password"])
     except Exception as e:
-        log.error("[%s] connect failed: %s", hostname, e)
+        print(f"[{hostname}] connect failed: {e}")
         return None
 
     try:
-        try:
-            resolved_ip = socket.gethostbyname(hostname)
-        except socket.gaierror:
-            resolved_ip = None
+        resolved_ip = socket.gethostbyname(hostname)
+    except socket.gaierror:
+        resolved_ip = None
 
-        vm = VirtualMachine()
-        vm.host = hostname
-        vm.ipv4 = resolved_ip or hostname
+    vm = VirtualMachine()
+    vm.host = hostname
+    vm.ipv4 = resolved_ip or hostname
 
-        # Fields sourced from inventory CSV
-        vm.environment = host.get("environment") or ""
-        vm.service = host.get("service") or ""
-        vm.platform = host.get("platform") or ""
-        vm.has_backup = host.get("has_backup", "").lower() in ("1", "true", "yes")
-        vm.has_dr = host.get("has_dr", "").lower() in ("1", "true", "yes")
+    ts("rpm")
+    vm.packages = get_rpm_data(client)
+    ts("groups")
+    vm.groups = get_groups(client)
+    ts("users")
+    vm.users = get_users(client, vm.groups)
+    ts("daemons")
+    vm.daemons = get_daemons(client)
+    ts("done")
 
-        ts("vm_info")
-        try:
-            info = get_vm_info(client)
-            vm.fqdn = info.get("hostname_f") or hostname
-            vm.shortname = info.get("hostname_s") or hostname.split(".")[0]
-            vm.kernel = info.get("kernel") or None
-            vm.arch = info.get("arch") or None
-            vm.os = info.get("os") or None
-            vm.cpus = int(info["cpus"]) if info.get("cpus", "").isdigit() else 0
-            vm.memory_mb = (
-                int(info["memory_kb"]) // 1024
-                if info.get("memory_kb", "").isdigit()
-                else 0
-            )
-            vm.storage_total_gb = (
-                int(info["storage_gb"])
-                if info.get("storage_gb", "").lstrip("-").isdigit()
-                else 0
-            )
-        except Exception as e:
-            log.warning("[%s] vm_info collection failed: %s", hostname, e)
-
-        ts("rpm")
-        try:
-            vm.packages = get_rpm_data(client)
-        except Exception as e:
-            log.warning("[%s] rpm collection failed: %s", hostname, e)
-
-        ts("groups")
-        try:
-            vm.groups = get_groups(client)
-        except Exception as e:
-            log.warning("[%s] groups collection failed: %s", hostname, e)
-
-        ts("users")
-        try:
-            vm.users = get_users(client, vm.groups)
-        except Exception as e:
-            log.warning("[%s] users collection failed: %s", hostname, e)
-
-        ts("daemons")
-        try:
-            vm.daemons = get_daemons(client)
-        except Exception as e:
-            log.warning("[%s] daemons collection failed: %s", hostname, e)
-
-        ts("disks")
-        try:
-            vm.disks = get_disks(client)
-        except Exception as e:
-            log.warning("[%s] disk collection failed: %s", hostname, e)
-
-        ts("nics")
-        try:
-            vm.nics = get_nics(client)
-        except Exception as e:
-            log.warning("[%s] NIC collection failed: %s", hostname, e)
-
-        ts("done")
-        return hostname, resolved_ip, vm
-
-    finally:
-        client.close()
+    client.close()
+    return hostname, resolved_ip, vm
 
 
 def process_hosts(
@@ -525,24 +509,14 @@ def process_hosts(
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {executor.submit(process_host, h, creds): h for h in hosts}
         for future in as_completed(futures):
-            try:
-                result = future.result()
-            except Exception as e:
-                log.error("Unhandled exception in worker: %s", e)
-                continue
+            result = future.result()
             if result is None:
                 continue
             hostname, resolved_ip, vm = result
-            log.info(
-                "[%s] resolved=%s packages=%d users=%d groups=%d daemons=%d disks=%d nics=%d",
-                hostname,
-                resolved_ip,
-                len(vm.packages),
-                len(vm.users),
-                len(vm.groups),
-                len(vm.daemons),
-                len(vm.disks),
-                len(vm.nics),
+            print(
+                f"[{hostname}] resolved={resolved_ip} "
+                f"packages={len(vm.packages)} users={len(vm.users)} "
+                f"groups={len(vm.groups)} daemons={len(vm.daemons)}"
             )
             results.append(result)
     return results
@@ -553,7 +527,11 @@ def process_hosts(
 
 def upsert_licenses(cur, license_names: list[str]):
     cur.executemany(
-        "INSERT INTO core.software_licenses (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+        """
+        INSERT INTO core.software_licenses (name)
+        VALUES (%s)
+        ON CONFLICT (name) DO NOTHING
+        """,
         [(r,) for r in license_names],
     )
 
@@ -604,73 +582,25 @@ def upsert_vms(cur, results: list[tuple]) -> dict[str, int]:
     cur.execute(
         """
         CREATE TEMP TABLE _stage_vms (
-            vm_name         varchar(255),
-            ipv4            varchar(55),
-            shortname       varchar(255),
-            fqdn            varchar(255),
-            kernel          varchar(255),
-            arch            varchar(55),
-            os              varchar(255),
-            cpus            int,
-            memory_mb       int8,
-            storage_total_gb int8,
-            platform        varchar(255),
-            environment     varchar(255),
-            service         varchar(255),
-            has_backup      boolean,
-            has_dr          boolean
+            vm_name varchar(255),
+            ipv4    varchar(55)
         ) ON COMMIT DROP
         """
     )
     seen = set()
     with cur.copy("COPY _stage_vms FROM STDIN (FORMAT TEXT, DELIMITER E'\\t')") as copy:
-        for hostname, resolved_ip, vm in results:
+        for hostname, resolved_ip, _ in results:
             key = resolved_ip or hostname
             if key in seen:
                 continue
             seen.add(key)
-            copy.write_row(
-                (
-                    hostname,
-                    resolved_ip or hostname,
-                    vm.shortname or None,
-                    vm.fqdn or None,
-                    vm.kernel or None,
-                    vm.arch or None,
-                    vm.os or None,
-                    vm.cpus or None,
-                    vm.memory_mb or None,
-                    vm.storage_total_gb or None,
-                    vm.platform or None,
-                    vm.environment or None,
-                    vm.service or None,
-                    vm.has_backup,
-                    vm.has_dr,
-                )
-            )
+            copy.write_row((hostname, resolved_ip or hostname))
 
     cur.execute(
         """
-        INSERT INTO core.vms (
-            vm_name, ipv4, shortname, fqdn, kernel,
-            cpus, memory_mb, storage_total_gb,
-            has_backup, has_dr
-        )
-        SELECT
-            vm_name, ipv4, shortname, fqdn, kernel,
-            cpus, memory_mb, storage_total_gb,
-            has_backup, has_dr
-        FROM _stage_vms
-        ON CONFLICT (vm_name) DO UPDATE SET
-            ipv4             = EXCLUDED.ipv4,
-            shortname        = EXCLUDED.shortname,
-            fqdn             = EXCLUDED.fqdn,
-            kernel           = EXCLUDED.kernel,
-            cpus             = EXCLUDED.cpus,
-            memory_mb        = EXCLUDED.memory_mb,
-            storage_total_gb = EXCLUDED.storage_total_gb,
-            has_backup       = EXCLUDED.has_backup,
-            has_dr           = EXCLUDED.has_dr
+        INSERT INTO core.vms (vm_name, ipv4)
+        SELECT vm_name, ipv4 FROM _stage_vms
+        ON CONFLICT (vm_name) DO UPDATE SET ipv4 = EXCLUDED.ipv4
         """
     )
     cur.execute("SELECT id, ipv4, vm_name FROM core.vms")
@@ -680,7 +610,9 @@ def upsert_vms(cur, results: list[tuple]) -> dict[str, int]:
     return vm_map
 
 
-def upsert_vm_packages(cur, vm_pkg_pairs, vm_map, pkg_map):
+def upsert_vm_packages(
+    cur, vm_pkg_pairs: list[tuple], vm_map: dict[str, int], pkg_map: dict[str, int]
+):
     cur.execute(
         """
         CREATE TEMP TABLE _stage_vm_packages (
@@ -696,7 +628,7 @@ def upsert_vm_packages(cur, vm_pkg_pairs, vm_map, pkg_map):
             vm_id = vm_map.get(resolved_ip) or vm_map.get(hostname)
             pkg_id = pkg_map.get(fullname)
             if not vm_id:
-                log.warning("[%s] no matching VM in map, skipping package", hostname)
+                print(f"[{hostname}] still no matching VM, skipping")
                 continue
             if not pkg_id:
                 continue
@@ -721,7 +653,7 @@ def upsert_vm_packages(cur, vm_pkg_pairs, vm_map, pkg_map):
     )
 
 
-def upsert_vm_groups(cur, results, vm_map):
+def upsert_vm_groups(cur, results: list[tuple], vm_map: dict[str, int]):
     cur.execute(
         """
         CREATE TEMP TABLE _stage_vm_groups (
@@ -763,7 +695,7 @@ def upsert_vm_groups(cur, results, vm_map):
     )
 
 
-def upsert_vm_users(cur, results, vm_map):
+def upsert_vm_users(cur, results: list[tuple], vm_map: dict[str, int]):
     cur.execute(
         """
         CREATE TEMP TABLE _stage_vm_users (
@@ -828,7 +760,7 @@ def upsert_vm_users(cur, results, vm_map):
     )
 
 
-def upsert_daemons(cur, results, vm_map):
+def upsert_daemons(cur, results: list[tuple], vm_map: dict[str, int]):
     cur.execute(
         """
         CREATE TEMP TABLE _stage_daemons (
@@ -940,142 +872,10 @@ def upsert_daemons(cur, results, vm_map):
     )
 
 
-def upsert_vm_disks(cur, results, vm_map):
-    cur.execute(
-        """
-        CREATE TEMP TABLE _stage_vm_disks (
-            vm_id       int,
-            disk_format varchar,
-            label       varchar(55),
-            size_gb     int8,
-            disk_path   varchar(512),
-            boot_disk   bool
-        ) ON COMMIT DROP
-        """
-    )
-    with cur.copy(
-        "COPY _stage_vm_disks FROM STDIN (FORMAT TEXT, DELIMITER E'\\t')"
-    ) as copy:
-        for hostname, resolved_ip, vm in results:
-            vm_id = vm_map.get(resolved_ip) or vm_map.get(hostname)
-            if not vm_id:
-                continue
-            for d in vm.disks:
-                copy.write_row(
-                    (
-                        vm_id,
-                        d.get("disk_format"),
-                        d.get("label"),
-                        d.get("size_gb", 0),
-                        d.get("disk_path"),
-                        d.get("boot_disk", False),
-                    )
-                )
-
-    cur.execute(
-        """
-        DELETE FROM core.vm_disks vd
-        WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_disks)
-          AND NOT EXISTS (
-              SELECT 1 FROM _stage_vm_disks s
-              WHERE s.vm_id = vd.vm_id
-                AND (
-                    (s.disk_path IS NOT NULL AND s.disk_path = vd.disk_path)
-                    OR (s.disk_path IS NULL AND s.label IS NOT DISTINCT FROM vd.label)
-                )
-          )
-        """
-    )
-    cur.execute(
-        """
-        DELETE FROM core.vm_disks vd
-        USING _stage_vm_disks s
-        WHERE vd.vm_id = s.vm_id
-          AND (
-              (s.disk_path IS NOT NULL AND s.disk_path = vd.disk_path)
-              OR (s.disk_path IS NULL AND s.label IS NOT DISTINCT FROM vd.label)
-          )
-        """
-    )
-    cur.execute(
-        """
-        INSERT INTO core.vm_disks (vm_id, disk_format_id, label, size_gb, disk_path, boot_disk)
-        SELECT s.vm_id, df.id, s.label, s.size_gb, s.disk_path, s.boot_disk
-        FROM _stage_vm_disks s
-        LEFT JOIN core.disk_formats df ON df.name = s.disk_format
-        """
-    )
-
-
-def upsert_vm_nics(cur, results, vm_map):
-    cur.execute(
-        """
-        CREATE TEMP TABLE _stage_vm_nics (
-            vm_id       int,
-            mac_address varchar(55),
-            ipv4        varchar(55),
-            ipv6        varchar(55),
-            connected   bool
-        ) ON COMMIT DROP
-        """
-    )
-    with cur.copy(
-        "COPY _stage_vm_nics FROM STDIN (FORMAT TEXT, DELIMITER E'\\t')"
-    ) as copy:
-        for hostname, resolved_ip, vm in results:
-            vm_id = vm_map.get(resolved_ip) or vm_map.get(hostname)
-            if not vm_id:
-                continue
-            for n in vm.nics:
-                copy.write_row(
-                    (
-                        vm_id,
-                        n.get("mac_address"),
-                        n.get("ipv4"),
-                        n.get("ipv6"),
-                        n.get("connected", True),
-                    )
-                )
-
-    cur.execute(
-        """
-        DELETE FROM core.vm_nics vn
-        WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_nics)
-          AND NOT EXISTS (
-              SELECT 1 FROM _stage_vm_nics s
-              WHERE s.vm_id = vn.vm_id
-                AND (
-                    (s.mac_address IS NOT NULL AND s.mac_address = vn.mac_address)
-                    OR (s.mac_address IS NULL AND s.ipv4 IS NOT DISTINCT FROM vn.ipv4)
-                )
-          )
-        """
-    )
-    cur.execute(
-        """
-        DELETE FROM core.vm_nics vn
-        USING _stage_vm_nics s
-        WHERE vn.vm_id = s.vm_id
-          AND (
-              (s.mac_address IS NOT NULL AND s.mac_address = vn.mac_address)
-              OR (s.mac_address IS NULL AND s.ipv4 IS NOT DISTINCT FROM vn.ipv4)
-          )
-        """
-    )
-    cur.execute(
-        """
-        INSERT INTO core.vm_nics (vm_id, network_id, mac_address, ipv4, ipv6, connected)
-        SELECT vm_id, NULL, mac_address, ipv4, ipv6, connected
-        FROM _stage_vm_nics
-        """
-    )
-
-
 def persist_results(
     results: list[tuple[str, str | None, VirtualMachine]], db_creds: dict
 ):
     if not results:
-        log.warning("No results to persist.")
         return
 
     pkg_map_by_fullname: dict[str, dict] = {}
@@ -1096,39 +896,20 @@ def persist_results(
     pkg_rows = list(pkg_map_by_fullname.values())
     license_names = list({r["license"] for r in pkg_rows if r["license"]})
 
-    try:
-        with psycopg.connect(db_creds["conn_str"], autocommit=False) as conn:
-            try:
-                with conn.cursor(row_factory=dict_row) as cur:
-                    if pkg_rows:
-                        upsert_licenses(cur, license_names)
-                        pkg_map = upsert_packages(cur, pkg_rows)
-                    else:
-                        log.warning("No packages collected.")
-                        pkg_map = {}
+    if not pkg_rows:
+        print("no packages collected, nothing to insert")
+        return
 
-                    vm_map = upsert_vms(cur, results)
-
-                    if pkg_rows:
-                        upsert_vm_packages(cur, vm_pkg_pairs, vm_map, pkg_map)
-
-                    upsert_vm_groups(cur, results, vm_map)
-                    upsert_vm_users(cur, results, vm_map)
-                    upsert_daemons(cur, results, vm_map)
-                    upsert_vm_disks(cur, results, vm_map)
-                    upsert_vm_nics(cur, results, vm_map)
-
-                conn.commit()
-                log.info("Transaction committed successfully.")
-
-            except Exception as e:
-                conn.rollback()
-                log.error("Transaction rolled back: %s", e)
-                raise
-
-    except psycopg.OperationalError as e:
-        log.error("Database connection failed: %s", e)
-        raise
+    with psycopg.connect(db_creds["conn_str"]) as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            upsert_licenses(cur, license_names)
+            pkg_map = upsert_packages(cur, pkg_rows)
+            vm_map = upsert_vms(cur, results)
+            upsert_vm_packages(cur, vm_pkg_pairs, vm_map, pkg_map)
+            upsert_vm_groups(cur, results, vm_map)
+            upsert_vm_users(cur, results, vm_map)
+            upsert_daemons(cur, results, vm_map)
+        conn.commit()
 
 
 # ── entrypoint ────────────────────────────────────────────────────────────────

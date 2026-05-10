@@ -8,8 +8,7 @@ SELECT
     v.id AS vm_id,
     v.vm_name,
     v.ipv4,
-    v.service AS vm_service_tag,
-    v.platform_ref AS vm_platform_ref,
+    -- v.platform_ref AS vm_platform_ref,
     v.cpus,
     v.memory_mb,
     v.storage_total_gb,
@@ -56,7 +55,7 @@ SELECT
     hh.cpu_cores AS host_cpu_cores,
     hh.memory_mb AS host_memory_mb,
     hh.maintenance_mode AS host_maintenance_mode,
-    hh.platform_ref AS host_platform_ref,
+    -- hh.platform_ref AS host_platform_ref,
     ht.name AS hypervisor_type,
     pv.name AS platform_vendor,
     hs.name AS host_status,
@@ -84,7 +83,7 @@ SELECT
     t.os_version AS template_os_version
 FROM
     core.vms v
-    LEFT JOIN core.os_types o ON o.id = v.os_type_id
+    LEFT JOIN core.operating_systems o ON o.id = v.os_id
     LEFT JOIN core.power_states ps ON ps.id = v.power_state_id
     LEFT JOIN core.environments e ON e.id = v.environment_id
     LEFT JOIN core.cpu_archs a ON a.id = v.arch_id
@@ -188,7 +187,7 @@ SELECT
     s.description AS snapshot_description,
     s.size_gb AS snapshot_size_gb,
     s.quiesced,
-    s.platform_ref AS snapshot_platform_ref,
+    --s.platform_ref AS snapshot_platform_ref,
     -- parent snapshot
     sp.id AS parent_snapshot_id,
     sp.snapshot_name AS parent_snapshot_name,
@@ -220,7 +219,7 @@ SELECT
     ROUND(ds.used_gb * 100.0 / NULLIF(ds.total_gb, 0), 2) AS used_pct,
     ds.thin_provisioned,
     ds.replication_enabled,
-    ds.platform_ref AS datastore_platform_ref,
+    -- ds.platform_ref AS datastore_platform_ref,
     ds.metadata AS datastore_metadata,
     dst.name AS datastore_type,
     -- datacenter
@@ -254,7 +253,7 @@ SELECT
     n.cidr,
     n.gateway,
     n.dns_servers,
-    n.platform_ref AS network_platform_ref,
+    -- n.platform_ref AS network_platform_ref,
     n.metadata AS network_metadata,
     nt.name AS network_type,
     -- attached host count

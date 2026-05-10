@@ -3,33 +3,36 @@
 -- =============================================================================
 CREATE TABLE core.vms (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    hypervisor_host_id int NULL REFERENCES core.hypervisor_hosts(id),
-    compute_pool_id int NULL REFERENCES core.compute_pools(id),
-    template_id int NULL REFERENCES core.templates(id),
-    power_state_id int NULL REFERENCES core.power_states(id),
+    hypervisor_host_id int REFERENCES core.hypervisor_hosts(id),
+    compute_pool_id int REFERENCES core.compute_pools(id),
+    template_id int references core.templates(id),
+    power_state_id int REFERENCES core.power_states(id),
+    cost_center_id int REFERENCES core.cost_centers(id),
+    team_id int REFERENCES core.teams(id),
+    project_id int references core.projects(id),
+    environment_id int REFERENCES core.environments(id),
+    service_id int references core.services(id),
     arch_id int NULL REFERENCES core.cpu_archs(id),
-    environment_id int NULL REFERENCES core.environments(id),
-    team_id int NULL REFERENCES core.teams(id),
-    cost_center_id int NULL REFERENCES core.cost_centers(id),
     os_id int NULL REFERENCES core.operating_systems(id),
     vm_status int references core.vm_status_types(id),
     vm_name varchar(255) NOT NULL UNIQUE,
     ipv4 varchar(55) NOT NULL UNIQUE,
+    shortname varchar(255) unique,
+    fqdn varchar(255) unique,
     vm_uuid varchar(55) NULL UNIQUE,
-    service varchar(55) NULL,
-    platform_ref varchar(255) NULL,
     cpus int NULL,
     memory_mb int8 NULL,
     storage_total_gb int8 NULL,
     has_backup boolean,
     has_dr boolean,
+    kernel varchar(255),
     metadata jsonb NULL
 );
 
 CREATE TABLE core.vm_disks (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     vm_id int NOT NULL REFERENCES core.vms(id),
-    datastore_id int NOT NULL REFERENCES core.datastores(id),
+    datastore_id int REFERENCES core.datastores(id),
     disk_format_id int NULL REFERENCES core.disk_formats(id),
     label varchar(55) NULL,
     size_gb int8 NOT NULL,
@@ -40,7 +43,7 @@ CREATE TABLE core.vm_disks (
 CREATE TABLE core.vm_nics (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     vm_id int NOT NULL REFERENCES core.vms(id),
-    network_id int NOT NULL REFERENCES core.networks(id),
+    network_id int REFERENCES core.networks(id),
     adapter_type_id int NULL REFERENCES core.adapter_types(id),
     mac_address varchar(55) NULL,
     ipv4 varchar(55) NULL,
@@ -57,14 +60,4 @@ CREATE TABLE core.vm_snapshots (
     size_gb int8 NULL,
     quiesced bool NOT NULL DEFAULT false,
     platform_ref varchar(255) NULL
-);
-
-CREATE TABLE core.service_vms (
-    service_id int references core.services(id),
-    vm_id int references core.vms(id)
-);
-
-CREATE TABLE core.project_vms (
-    project_id int references core.projects(id),
-    vm_id int references core.vms(id)
 );
