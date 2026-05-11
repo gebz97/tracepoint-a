@@ -40,6 +40,21 @@ CREATE TABLE core.vm_disks (
     boot_disk bool NOT NULL DEFAULT false
 );
 
+CREATE TABLE core.vm_mounts (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    vm_id int not null references core.vms(id),
+    mountpoint varchar not null,
+    source varchar not null,
+    fstype  varchar(55) not null,
+    opts varchar[],
+    status varchar(55),
+    in_fstab boolean,
+    size bigint,
+    used_last_seen bigint,
+    used_pct numeric,
+    CONSTRAINT uq_vm_mounts UNIQUE (vm_id, mountpoint)
+);
+
 CREATE TABLE core.vm_nics (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     vm_id int NOT NULL REFERENCES core.vms(id),

@@ -176,6 +176,15 @@ class Disk:
     path: str = ""
     boot_disk: bool = False
 
+@dataclass
+class Mount:
+    mountpoint: str = ""
+    source: str = ""
+    fstype: str = ""
+    status: str = ""    
+    in_fstab: bool = False
+    opts: list[str] = field(default_factory=list)
+
 
 @dataclass
 class NetworkInterface:
@@ -259,10 +268,11 @@ class VirtualMachine:
     memory_mb: int
     storage_total_gb: int
     kernel: str = ""
-    packages: list[dict] = field(default_factory=list)
-    users: list[dict] = field(default_factory=list)
-    groups: list[dict] = field(default_factory=list)
-    daemons: list[dict] = field(default_factory=list)
+    packages: list[SoftwarePackage] = field(default_factory=list)
+    users: list[User] = field(default_factory=list)
+    groups: list[Group] = field(default_factory=list)
+    daemons: list[Daemon] = field(default_factory=list)
+    mounts: list[Mount] = field(default_factory=list)
 
 
 # ── collection ────────────────────────────────────────────────────────────────

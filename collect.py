@@ -58,6 +58,37 @@ SYSTEMCTL_SHOW_PROPS = [
     "UnitFileState",
 ]
 
+IGNORED_FSTYPES = {
+    "sysfs",
+    "proc",
+    "devtmpfs",
+    "devpts",
+    "tmpfs",
+    "autofs",
+    "cgroup",
+    "cgroup2",
+    "configfs",
+    "debugfs",
+    "tracefs",
+    "securityfs",
+    "pstore",
+    "bpf",
+    "fusectl",
+    "mqueue",
+    "hugetlbfs",
+    "ramfs",
+    "efivarfs",
+    "binfmt_misc",
+    "rpc_pipefs",
+}
+
+IGNORED_MOUNTPOINT_PREFIXES = (
+    "/sys",
+    "/proc",
+    "/dev",
+    "/run",
+)
+
 
 # ── dataclasses ───────────────────────────────────────────────────────────────
 
@@ -86,6 +117,7 @@ class VirtualMachine:
     daemons: list[dict] = field(default_factory=list)
     disks: list[dict] = field(default_factory=list)
     nics: list[dict] = field(default_factory=list)
+    mounts: list[dict] = field(default_factory=list)
 
 
 # ── collection ────────────────────────────────────────────────────────────────
@@ -218,6 +250,112 @@ def get_users(client: pm.SSHClient, groups: list[dict]) -> list[dict]:
             }
         )
     return users
+
+
+def get_mounts(client: pm.SSHClient) -> list[dict]:
+    """
+    Cross-references live mounts (via `mount`) against /etc/fstab.
+    - in_fstab = True  → entry exists in fstab (regardless of whether currently mounted)
+    - status          → 'mounted', 'unmounted', or 'fstab_only'
+    mountpoint is the key used to correlate the two sources.
+    """
+
+    # --- fstab ---
+    _, stdout, _ = client.exec_command("cat /etc/fstab 2>/dev/null")
+    fstab: dict[str, dict] = {}
+    for line in stdout:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        source, mountpoint, fstype, opts_str = parts[0], parts[1], parts[2], parts[3]
+        fstab[mountpoint] = {
+            "source": source,
+            "fstype": fstype,
+            "opts": [o for o in opts_str.split(",") if o],
+        }
+
+    # --- live mounts ---
+    _, stdout, stderr = client.exec_command("mount 2>/dev/null")
+    exit_code = stdout.channel.recv_exit_status()
+    if exit_code != 0:
+        log.warning("mount command failed (exit %d)", exit_code)
+
+    live: dict[str, dict] = {}
+    for line in stdout:
+        # format: source on mountpoint type fstype (opts,...)
+        # e.g.:   sysfs on /sys type sysfs (rw,nosuid,nodev,noexec,relatime)
+        parts = line.split()
+        if len(parts) < 6 or parts[1] != "on" or parts[3] != "type":
+            continue
+        source, mountpoint, fstype = parts[0], parts[2], parts[4]
+        opts_str = " ".join(parts[5:]).strip("()")
+        live[mountpoint] = {
+            "source": source,
+            "fstype": fstype,
+            "opts": [o for o in opts_str.split(",") if o],
+        }
+
+    # --- df ---
+    _, stdout, _ = client.exec_command(
+        "df -B1 --output=target,size,used,pcent 2>/dev/null | tail -n +2"
+    )
+    df_stats: dict[str, dict] = {}
+    for line in stdout:
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        mountpoint, size, used, pct_str = parts[0], parts[1], parts[2], parts[3]
+        try:
+            df_stats[mountpoint] = {
+                "size": int(size),
+                "used": int(used),
+                "used_pct": float(pct_str.rstrip("%")),
+            }
+        except ValueError:
+            continue
+
+    # --- merge ---
+    all_mountpoints = set(fstab) | set(live)
+    mounts = []
+    for mp in all_mountpoints:
+        in_live = mp in live
+        in_fstab = mp in fstab
+
+        if in_live and in_fstab:
+            status = "mounted"
+            entry = live[mp]
+        elif in_live:
+            status = "mounted"
+            entry = live[mp]
+        else:
+            status = "fstab_only"
+            entry = fstab[mp]
+
+        # skip virtual/kernel filesystems
+        if entry["fstype"] in IGNORED_FSTYPES:
+            continue
+        if any(mp.startswith(pfx) for pfx in IGNORED_MOUNTPOINT_PREFIXES):
+            continue
+
+        stats = df_stats.get(mp, {})
+        mounts.append(
+            {
+                "mountpoint": mp,
+                "source": entry["source"],
+                "fstype": entry["fstype"],
+                "opts": entry["opts"],
+                "status": status,
+                "in_fstab": in_fstab,
+                "size": stats.get("size"),
+                "used_last_seen": stats.get("used"),
+                "used_pct": stats.get("used_pct"),
+            }
+        )
+
+    return mounts
 
 
 def get_disks(client: pm.SSHClient) -> list[dict]:
@@ -505,6 +643,12 @@ def process_host(
         except Exception as e:
             log.warning("[%s] disk collection failed: %s", hostname, e)
 
+        ts("mounts")
+        try:
+            vm.mounts = get_mounts(client)
+        except Exception as e:
+            log.warning("[%s] mount collection failed: %s", hostname, e)
+
         ts("nics")
         try:
             vm.nics = get_nics(client)
@@ -534,7 +678,7 @@ def process_hosts(
                 continue
             hostname, resolved_ip, vm = result
             log.info(
-                "[%s] resolved=%s packages=%d users=%d groups=%d daemons=%d disks=%d nics=%d",
+                "[%s] resolved=%s packages=%d users=%d groups=%d daemons=%d disks=%d nics=%d mounts=%d",
                 hostname,
                 resolved_ip,
                 len(vm.packages),
@@ -543,6 +687,7 @@ def process_hosts(
                 len(vm.daemons),
                 len(vm.disks),
                 len(vm.nics),
+                len(vm.mounts),
             )
             results.append(result)
     return results
@@ -1007,6 +1152,75 @@ def upsert_vm_disks(cur, results, vm_map):
     )
 
 
+def upsert_vm_mounts(cur, results, vm_map):
+    cur.execute(
+        """
+        CREATE TEMP TABLE _stage_vm_mounts (
+            vm_id      int,
+            mountpoint varchar,
+            source     varchar,
+            fstype     varchar(55),
+            opts       varchar[],
+            status     varchar(55),
+            in_fstab   boolean,
+            size       bigint,
+            used_last_seen bigint,
+            used_pct   numeric
+        ) ON COMMIT DROP
+        """
+    )
+    with cur.copy(
+        "COPY _stage_vm_mounts FROM STDIN (FORMAT TEXT, DELIMITER E'\\t')"
+    ) as copy:
+        for hostname, resolved_ip, vm in results:
+            vm_id = vm_map.get(resolved_ip) or vm_map.get(hostname)
+            if not vm_id:
+                continue
+            for m in vm.mounts:
+                copy.write_row(
+                    (
+                        vm_id,
+                        m["mountpoint"],
+                        m["source"],
+                        m["fstype"],
+                        m["opts"],
+                        m["status"],
+                        m["in_fstab"],
+                        m.get("size"),
+                        m.get("used_last_seen"),
+                        m.get("used_pct"),
+                    )
+                )
+
+    cur.execute(
+        """
+        DELETE FROM core.vm_mounts vm
+        WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_mounts)
+          AND NOT EXISTS (
+              SELECT 1 FROM _stage_vm_mounts s
+              WHERE s.vm_id = vm.vm_id AND s.mountpoint = vm.mountpoint
+          )
+        """
+    )
+    cur.execute(
+        """
+        INSERT INTO core.vm_mounts (vm_id, mountpoint, source, fstype, opts, status,
+            in_fstab, size, used_last_seen, used_pct)
+        SELECT vm_id, mountpoint, source, fstype, opts, status, in_fstab, size, used_last_seen, used_pct
+        FROM _stage_vm_mounts
+        ON CONFLICT (vm_id, mountpoint) DO UPDATE SET
+            source         = EXCLUDED.source,
+            fstype         = EXCLUDED.fstype,
+            opts           = EXCLUDED.opts,
+            status         = EXCLUDED.status,
+            in_fstab       = EXCLUDED.in_fstab,
+            size           = EXCLUDED.size,
+            used_last_seen = EXCLUDED.used_last_seen,
+            used_pct       = EXCLUDED.used_pct
+        """
+    )
+
+
 def upsert_vm_nics(cur, results, vm_map):
     cur.execute(
         """
@@ -1116,6 +1330,7 @@ def persist_results(
                     upsert_vm_users(cur, results, vm_map)
                     upsert_daemons(cur, results, vm_map)
                     upsert_vm_disks(cur, results, vm_map)
+                    upsert_vm_mounts(cur, results, vm_map)
                     upsert_vm_nics(cur, results, vm_map)
 
                 conn.commit()
@@ -1135,8 +1350,8 @@ def persist_results(
 
 
 def main():
-    db_creds = read_vault("tracepoint-a", "tpa/access/db")
-    ssh_creds = read_vault("tracepoint-a", "tpa/access/ssh")
+    db_creds = read_vault("tracepoint-a", "access/db")
+    ssh_creds = read_vault("tracepoint-a", "access/ssh")
     hosts = read_csv("hosts.csv")
 
     results = process_hosts(hosts, ssh_creds)
