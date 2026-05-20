@@ -19,6 +19,7 @@ CREATE TABLE core.vms (
     ipv4 varchar(55) NOT NULL UNIQUE,
     shortname varchar(255) unique,
     fqdn varchar(255) unique,
+    refname varchar(255) unique,
     vm_uuid varchar(55) NULL UNIQUE,
     cpus int NULL,
     memory_mb int8 NULL,

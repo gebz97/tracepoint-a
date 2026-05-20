@@ -18,7 +18,7 @@ CREATE TABLE core.software_packages (
 );
 
 create table core.vm_packages (
-    vm_id int references core.vms(id),
-    package_id bigint references core.software_packages(id),
+    vm_id int references core.vms(id) on delete cascade,
+    package_id bigint references core.software_packages(id) on delete cascade,
     constraint pk_vm_pkgs primary key (vm_id, package_id)
 );

@@ -1,0 +1,5 @@
+psycopg[binary]
+logging
+paramiko
+hvac
+pyVmomi
