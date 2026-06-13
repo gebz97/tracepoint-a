@@ -1,7 +1,7 @@
 -- =============================================================================
 -- ORGANIZATIONAL
 -- =============================================================================
-CREATE TABLE core.teams (
+CREATE TABLE teams (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     team_name varchar(255) NOT NULL UNIQUE,
     description text NULL,
@@ -9,7 +9,7 @@ CREATE TABLE core.teams (
     metadata jsonb NULL
 );
 
-CREATE TABLE core.contacts (
+CREATE TABLE contacts (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     full_name varchar(255) NOT NULL,
     email varchar(255) NOT NULL UNIQUE,
@@ -17,32 +17,32 @@ CREATE TABLE core.contacts (
 );
 
 -- team members (many-to-many, a contact can be in multiple teams)
-CREATE TABLE core.team_contacts (
-    team_id int NOT NULL REFERENCES core.teams(id),
-    contact_id int NOT NULL REFERENCES core.contacts(id),
+CREATE TABLE team_contacts (
+    team_id int NOT NULL REFERENCES teams(id),
+    contact_id int NOT NULL REFERENCES contacts(id),
     role varchar(55) NULL,
     PRIMARY KEY (team_id, contact_id)
 );
 
-CREATE TABLE core.services (
+CREATE TABLE services (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    team_id int NOT NULL REFERENCES core.teams(id),
+    team_id int NOT NULL REFERENCES teams(id),
     service_name varchar(255) NOT NULL UNIQUE,
     description text NULL,
     metadata jsonb NULL
 );
 
-CREATE TABLE core.cost_centers (
+CREATE TABLE cost_centers (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     cost_center_code varchar(55) NOT NULL UNIQUE,
     cost_center_name varchar(255) NOT NULL,
     description text NULL
 );
 
-CREATE TABLE core.projects (
+CREATE TABLE projects (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    team_id int NOT NULL REFERENCES core.teams(id),
-    cost_center_id int NULL REFERENCES core.cost_centers(id),
+    team_id int NOT NULL REFERENCES teams(id),
+    cost_center_id int NULL REFERENCES cost_centers(id),
     project_name varchar(255) NOT NULL UNIQUE,
     description text NULL,
     start_date date NULL,
@@ -50,7 +50,7 @@ CREATE TABLE core.projects (
     metadata jsonb NULL
 );
 
-create table core.vendors (
+create table vendors (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name varchar(255) not null unique,
     country varchar(255),

@@ -2,7 +2,7 @@
 -- HYPERVISOR HOSTS VIEW
 -- =============================================================================
 CREATE
-OR REPLACE VIEW core.vw_hypervisor_hosts AS
+OR REPLACE VIEW vw_hypervisor_hosts AS
 SELECT
     hh.id AS host_id,
     hh.hostname,
@@ -38,7 +38,7 @@ SELECT
         SELECT
             count(*)
         FROM
-            core.vms v
+            vms v
         WHERE
             v.hypervisor_host_id = hh.id
     ) AS vm_count,
@@ -46,17 +46,17 @@ SELECT
         SELECT
             count(*)
         FROM
-            core.vms v
-            JOIN core.power_states ps ON ps.id = v.power_state_id
+            vms v
+            JOIN power_states ps ON ps.id = v.power_state_id
         WHERE
             v.hypervisor_host_id = hh.id
             AND ps.name = 'running'
     ) AS running_vm_count
 FROM
-    core.hypervisor_hosts hh
-    LEFT JOIN core.hypervisor_types ht ON ht.id = hh.hypervisor_type_id
-    LEFT JOIN core.platform_vendors pv ON pv.id = hh.platform_vendor_id
-    LEFT JOIN core.host_statuses hs ON hs.id = hh.status_id
-    LEFT JOIN core.clusters cl ON cl.id = hh.cluster_id
-    LEFT JOIN core.cluster_types ct ON ct.id = cl.cluster_type_id
-    LEFT JOIN core.datacenters dc ON dc.id = cl.datacenter_id;
+    hypervisor_hosts hh
+    LEFT JOIN hypervisor_types ht ON ht.id = hh.hypervisor_type_id
+    LEFT JOIN platform_vendors pv ON pv.id = hh.platform_vendor_id
+    LEFT JOIN host_statuses hs ON hs.id = hh.status_id
+    LEFT JOIN clusters cl ON cl.id = hh.cluster_id
+    LEFT JOIN cluster_types ct ON ct.id = cl.cluster_type_id
+    LEFT JOIN datacenters dc ON dc.id = cl.datacenter_id;

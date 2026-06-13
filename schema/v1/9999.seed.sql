@@ -1,4 +1,4 @@
--- insert into core.vms(vm_name, ipv4) values
+-- insert into vms(vm_name, ipv4) values
 --     ('test01', '192.168.1.101'),
 --     ('test02', '192.168.1.102'),
 --     ('test03', '192.168.1.103'),

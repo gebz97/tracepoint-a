@@ -2,7 +2,7 @@
 -- SEED LOOKUPS
 -- =============================================================================
 INSERT INTO
-    core.hypervisor_types (name)
+    hypervisor_types (name)
 VALUES
     ('esxi'),
     ('kvm'),
@@ -13,7 +13,7 @@ VALUES
     ('ovirt');
 
 INSERT INTO
-    core.platform_vendors (name)
+    platform_vendors (name)
 VALUES
     ('vmware'),
     ('microsoft'),
@@ -23,7 +23,7 @@ VALUES
     ('canonical');
 
 INSERT INTO
-    core.datastore_types (name)
+    datastore_types (name)
 VALUES
     ('nfs'),
     ('iscsi'),
@@ -37,7 +37,7 @@ VALUES
     ('nvme-of');
 
 INSERT INTO
-    core.network_types (name)
+    network_types (name)
 VALUES
     ('standard'),
     ('distributed'),
@@ -47,7 +47,7 @@ VALUES
     ('overlay');
 
 INSERT INTO
-    core.disk_formats (name)
+    disk_formats (name)
 VALUES
     ('thin'),
     ('thick_lazy'),
@@ -59,7 +59,7 @@ VALUES
     ('vhdx');
 
 INSERT INTO
-    core.adapter_types (name)
+    adapter_types (name)
 VALUES
     ('vmxnet3'),
     ('e1000e'),
@@ -70,7 +70,7 @@ VALUES
     ('sriov');
 
 INSERT INTO
-    core.cluster_types (name)
+    cluster_types (name)
 VALUES
     ('compute'),
     ('storage'),
@@ -78,7 +78,7 @@ VALUES
     ('management');
 
 INSERT INTO
-    core.cpu_archs (name)
+    cpu_archs (name)
 VALUES
     ('x86_64'),
     ('aarch64'),
@@ -87,7 +87,7 @@ VALUES
     ('s390x');
 
 INSERT INTO
-    core.power_states (name)
+    power_states (name)
 VALUES
     ('running'),
     ('stopped'),
@@ -96,7 +96,7 @@ VALUES
     ('unknown');
 
 INSERT INTO
-    core.host_statuses (name)
+    host_statuses (name)
 VALUES
     ('online'),
     ('offline'),
@@ -104,7 +104,7 @@ VALUES
     ('unknown');
 
 INSERT INTO
-    core.environments (name, abbr)
+    environments (name, abbr)
 VALUES
     ('poc', 'c'),
     ('dev', 'v'),

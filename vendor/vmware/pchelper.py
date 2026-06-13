@@ -6,7 +6,7 @@ import pyVmomi
 
 
 # Shamelessly borrowed from:
-# https://github.com/dnaeon/py-vconnector/blob/master/src/vconnector/core.py
+# https://github.com/dnaeon/py-vconnector/blob/master/src/vconnector/py
 def collect_properties(si, view_ref, obj_type, path_set=None,
                        include_mors=False):
     """

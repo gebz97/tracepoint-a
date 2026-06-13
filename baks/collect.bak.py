@@ -10,18 +10,18 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 TPA_DOCUMENTATION="""
 DDL SCHEMA:
-CREATE TABLE core.vms (
+CREATE TABLE vms (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    hypervisor_host_id int REFERENCES core.hypervisor_hosts(id),
-    compute_pool_id int REFERENCES core.compute_pools(id),
-    power_state_id int REFERENCES core.power_states(id),
-    cost_center_id int REFERENCES core.cost_centers(id),
-    team_id int REFERENCES core.teams(id),
-    environment_id int REFERENCES core.environments(id),
-    service_id int references core.services(id),
-    arch_id int NULL REFERENCES core.cpu_archs(id),
-    os_id int NULL REFERENCES core.operating_systems(id),
-    vm_status int references core.vm_status_types(id),
+    hypervisor_host_id int REFERENCES hypervisor_hosts(id),
+    compute_pool_id int REFERENCES compute_pools(id),
+    power_state_id int REFERENCES power_states(id),
+    cost_center_id int REFERENCES cost_centers(id),
+    team_id int REFERENCES teams(id),
+    environment_id int REFERENCES environments(id),
+    service_id int references services(id),
+    arch_id int NULL REFERENCES cpu_archs(id),
+    os_id int NULL REFERENCES operating_systems(id),
+    vm_status int references vm_status_types(id),
     vm_name varchar(255) NOT NULL UNIQUE,
     ipv4 varchar(55) NOT NULL UNIQUE,
     shortname varchar(255) unique,
@@ -36,40 +36,40 @@ CREATE TABLE core.vms (
     metadata jsonb NULL
 );
 
-CREATE TABLE core.vm_disks (
+CREATE TABLE vm_disks (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    vm_id int NOT NULL REFERENCES core.vms(id),
-    datastore_id int NOT NULL REFERENCES core.datastores(id),
-    disk_format_id int NULL REFERENCES core.disk_formats(id),
+    vm_id int NOT NULL REFERENCES vms(id),
+    datastore_id int NOT NULL REFERENCES datastores(id),
+    disk_format_id int NULL REFERENCES disk_formats(id),
     label varchar(55) NULL,
     size_gb int8 NOT NULL,
     disk_path varchar(512) NULL,
     boot_disk bool NOT NULL DEFAULT false
 );
 
-CREATE TABLE core.vm_nics (
+CREATE TABLE vm_nics (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    vm_id int NOT NULL REFERENCES core.vms(id),
-    network_id int NOT NULL REFERENCES core.networks(id),
-    adapter_type_id int NULL REFERENCES core.adapter_types(id),
+    vm_id int NOT NULL REFERENCES vms(id),
+    network_id int NOT NULL REFERENCES networks(id),
+    adapter_type_id int NULL REFERENCES adapter_types(id),
     mac_address varchar(55) NULL,
     ipv4 varchar(55) NULL,
     ipv6 varchar(55) NULL,
     connected bool NOT NULL DEFAULT true
 );
 
-CREATE TABLE core.vm_groups (
+CREATE TABLE vm_groups (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    vm_id INT NOT NULL REFERENCES core.vms(id) ON DELETE CASCADE,
+    vm_id INT NOT NULL REFERENCES vms(id) ON DELETE CASCADE,
     name VARCHAR(55) NOT NULL,
     gid INT,
     description TEXT,
     UNIQUE(vm_id, name)
 );
 
-CREATE TABLE core.vm_users (
+CREATE TABLE vm_users (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    vm_id INT NOT NULL REFERENCES core.vms(id) ON DELETE CASCADE,
+    vm_id INT NOT NULL REFERENCES vms(id) ON DELETE CASCADE,
     name VARCHAR(55) NOT NULL,
     uid INT NOT NULL,
     pgroup VARCHAR(55) NOT NULL,
@@ -82,9 +82,9 @@ CREATE TABLE core.vm_users (
     UNIQUE(vm_id, uid)
 );
 
-CREATE TABLE core.daemons (
+CREATE TABLE daemons (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    vm_id int NOT NULL REFERENCES core.vms(id),
+    vm_id int NOT NULL REFERENCES vms(id),
     daemon_name varchar(255) NOT NULL,
     start_user varchar(255),
     start_group varchar(255),
@@ -109,25 +109,25 @@ CREATE TABLE core.daemons (
     constraint unique_daemons_vm_daemon unique (vm_id, daemon_name)
 );
 
-CREATE TABLE core.software_licenses (
+CREATE TABLE software_licenses (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name varchar not null unique,
     shortname text unique
 );
 
-CREATE TABLE core.software_packages (
+CREATE TABLE software_packages (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     fullname varchar(511) not null unique,
     name varchar(255),
     version varchar(255),
     arch varchar(15),
-    license_id int references core.software_licenses(id),
-    vendor int references core.vendors(id)
+    license_id int references software_licenses(id),
+    vendor int references vendors(id)
 );
 
-create table core.vm_packages (
-    vm_id int references core.vms(id),
-    package_id bigint references core.software_packages(id),
+create table vm_packages (
+    vm_id int references vms(id),
+    package_id bigint references software_packages(id),
     constraint pk_vm_pkgs primary key (vm_id, package_id)
 );
 """
@@ -538,7 +538,7 @@ def process_hosts(
 def upsert_licenses(cur, license_names: list[str]):
     cur.executemany(
         """
-        INSERT INTO core.software_licenses (name)
+        INSERT INTO software_licenses (name)
         VALUES (%s)
         ON CONFLICT (name) DO NOTHING
         """,
@@ -574,17 +574,17 @@ def upsert_packages(cur, pkg_rows: list[dict]) -> dict[str, int]:
 
     cur.execute(
         """
-        INSERT INTO core.software_packages (fullname, name, version, arch, license_id)
+        INSERT INTO software_packages (fullname, name, version, arch, license_id)
         SELECT s.fullname, s.name, s.version, s.arch, l.id
         FROM _stage_packages s
-        LEFT JOIN core.software_licenses l ON l.name = s.license_name
+        LEFT JOIN software_licenses l ON l.name = s.license_name
         ON CONFLICT (fullname) DO UPDATE SET
             version    = EXCLUDED.version,
             arch       = EXCLUDED.arch,
             license_id = EXCLUDED.license_id
         """
     )
-    cur.execute("SELECT id, fullname FROM core.software_packages")
+    cur.execute("SELECT id, fullname FROM software_packages")
     return {r["fullname"]: r["id"] for r in cur.fetchall()}
 
 
@@ -608,12 +608,12 @@ def upsert_vms(cur, results: list[tuple]) -> dict[str, int]:
 
     cur.execute(
         """
-        INSERT INTO core.vms (vm_name, ipv4)
+        INSERT INTO vms (vm_name, ipv4)
         SELECT vm_name, ipv4 FROM _stage_vms
         ON CONFLICT (vm_name) DO UPDATE SET ipv4 = EXCLUDED.ipv4
         """
     )
-    cur.execute("SELECT id, ipv4, vm_name FROM core.vms")
+    cur.execute("SELECT id, ipv4, vm_name FROM vms")
     vm_rows = cur.fetchall()
     vm_map = {r["ipv4"]: r["id"] for r in vm_rows}
     vm_map.update({r["vm_name"]: r["id"] for r in vm_rows})
@@ -646,7 +646,7 @@ def upsert_vm_packages(
 
     cur.execute(
         """
-        DELETE FROM core.vm_packages vp
+        DELETE FROM vm_packages vp
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_packages)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_vm_packages s
@@ -656,7 +656,7 @@ def upsert_vm_packages(
     )
     cur.execute(
         """
-        INSERT INTO core.vm_packages (vm_id, package_id)
+        INSERT INTO vm_packages (vm_id, package_id)
         SELECT DISTINCT vm_id, package_id FROM _stage_vm_packages
         ON CONFLICT (vm_id, package_id) DO NOTHING
         """
@@ -686,7 +686,7 @@ def upsert_vm_groups(cur, results: list[tuple], vm_map: dict[str, int]):
 
     cur.execute(
         """
-        DELETE FROM core.vm_groups vg
+        DELETE FROM vm_groups vg
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_groups)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_vm_groups s
@@ -696,7 +696,7 @@ def upsert_vm_groups(cur, results: list[tuple], vm_map: dict[str, int]):
     )
     cur.execute(
         """
-        INSERT INTO core.vm_groups (vm_id, name, gid, description)
+        INSERT INTO vm_groups (vm_id, name, gid, description)
         SELECT vm_id, name, gid, description FROM _stage_vm_groups
         ON CONFLICT (vm_id, name) DO UPDATE SET
             gid         = EXCLUDED.gid,
@@ -745,7 +745,7 @@ def upsert_vm_users(cur, results: list[tuple], vm_map: dict[str, int]):
 
     cur.execute(
         """
-        DELETE FROM core.vm_users vu
+        DELETE FROM vm_users vu
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_users)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_vm_users s
@@ -755,7 +755,7 @@ def upsert_vm_users(cur, results: list[tuple], vm_map: dict[str, int]):
     )
     cur.execute(
         """
-        INSERT INTO core.vm_users (vm_id, name, uid, pgroup, groups, gid, gids, has_sudo, description)
+        INSERT INTO vm_users (vm_id, name, uid, pgroup, groups, gid, gids, has_sudo, description)
         SELECT vm_id, name, uid, pgroup, groups, gid, gids, has_sudo, description
         FROM _stage_vm_users
         ON CONFLICT (vm_id, name) DO UPDATE SET
@@ -834,7 +834,7 @@ def upsert_daemons(cur, results: list[tuple], vm_map: dict[str, int]):
 
     cur.execute(
         """
-        DELETE FROM core.daemons d
+        DELETE FROM daemons d
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_daemons)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_daemons s
@@ -844,7 +844,7 @@ def upsert_daemons(cur, results: list[tuple], vm_map: dict[str, int]):
     )
     cur.execute(
         """
-        INSERT INTO core.daemons (
+        INSERT INTO daemons (
             vm_id, daemon_name, start_user, start_group, unit_file_path,
             service_type, service_state, service_sub_state,
             exec_start, exec_stop, exec_reload,

@@ -2,7 +2,7 @@
 -- FULL VM VIEW
 -- =============================================================================
 CREATE
-OR REPLACE VIEW core.vw_vms AS
+OR REPLACE VIEW vw_vms AS
 SELECT
     -- vm core
     v.id AS vm_id,
@@ -82,31 +82,31 @@ SELECT
     t.distribution AS template_distribution,
     t.os_version AS template_os_version
 FROM
-    core.vms v
-    LEFT JOIN core.operating_systems o ON o.id = v.os_id
-    LEFT JOIN core.power_states ps ON ps.id = v.power_state_id
-    LEFT JOIN core.environments e ON e.id = v.environment_id
-    LEFT JOIN core.cpu_archs a ON a.id = v.arch_id
-    LEFT JOIN core.services svc ON svc.id = v.service_id
-    LEFT JOIN core.teams tm ON tm.id = v.team_id
-    LEFT JOIN core.teams stm ON stm.id = svc.team_id
-    LEFT JOIN core.projects pr ON pr.id = v.project_id
-    LEFT JOIN core.cost_centers cc ON cc.id = v.cost_center_id
-    LEFT JOIN core.hypervisor_hosts hh ON hh.id = v.hypervisor_host_id
-    LEFT JOIN core.hypervisor_types ht ON ht.id = hh.hypervisor_type_id
-    LEFT JOIN core.platform_vendors pv ON pv.id = hh.platform_vendor_id
-    LEFT JOIN core.host_statuses hs ON hs.id = hh.status_id
-    LEFT JOIN core.clusters cl ON cl.id = hh.cluster_id
-    LEFT JOIN core.cluster_types clt ON clt.id = cl.cluster_type_id
-    LEFT JOIN core.datacenters dc ON dc.id = cl.datacenter_id
-    LEFT JOIN core.compute_pools cp ON cp.id = v.compute_pool_id
-    LEFT JOIN core.templates t ON t.id = v.template_id;
+    vms v
+    LEFT JOIN operating_systems o ON o.id = v.os_id
+    LEFT JOIN power_states ps ON ps.id = v.power_state_id
+    LEFT JOIN environments e ON e.id = v.environment_id
+    LEFT JOIN cpu_archs a ON a.id = v.arch_id
+    LEFT JOIN services svc ON svc.id = v.service_id
+    LEFT JOIN teams tm ON tm.id = v.team_id
+    LEFT JOIN teams stm ON stm.id = svc.team_id
+    LEFT JOIN projects pr ON pr.id = v.project_id
+    LEFT JOIN cost_centers cc ON cc.id = v.cost_center_id
+    LEFT JOIN hypervisor_hosts hh ON hh.id = v.hypervisor_host_id
+    LEFT JOIN hypervisor_types ht ON ht.id = hh.hypervisor_type_id
+    LEFT JOIN platform_vendors pv ON pv.id = hh.platform_vendor_id
+    LEFT JOIN host_statuses hs ON hs.id = hh.status_id
+    LEFT JOIN clusters cl ON cl.id = hh.cluster_id
+    LEFT JOIN cluster_types clt ON clt.id = cl.cluster_type_id
+    LEFT JOIN datacenters dc ON dc.id = cl.datacenter_id
+    LEFT JOIN compute_pools cp ON cp.id = v.compute_pool_id
+    LEFT JOIN templates t ON t.id = v.template_id;
 
 -- =============================================================================
 -- VM DISKS VIEW
 -- =============================================================================
 CREATE
-OR REPLACE VIEW core.vw_vm_disks AS
+OR REPLACE VIEW vw_vm_disks AS
 SELECT
     vd.id AS disk_id,
     vd.label AS disk_label,
@@ -132,20 +132,20 @@ SELECT
     dc.id AS datacenter_id,
     dc.datacenter_name
 FROM
-    core.vm_disks vd
-    LEFT JOIN core.disk_formats df ON df.id = vd.disk_format_id
-    LEFT JOIN core.vms v ON v.id = vd.vm_id
-    LEFT JOIN core.power_states ps ON ps.id = v.power_state_id
-    LEFT JOIN core.environments e ON e.id = v.environment_id
-    LEFT JOIN core.datastores ds ON ds.id = vd.datastore_id
-    LEFT JOIN core.datastore_types dst ON dst.id = ds.datastore_type_id
-    LEFT JOIN core.datacenters dc ON dc.id = ds.datacenter_id;
+    vm_disks vd
+    LEFT JOIN disk_formats df ON df.id = vd.disk_format_id
+    LEFT JOIN vms v ON v.id = vd.vm_id
+    LEFT JOIN power_states ps ON ps.id = v.power_state_id
+    LEFT JOIN environments e ON e.id = v.environment_id
+    LEFT JOIN datastores ds ON ds.id = vd.datastore_id
+    LEFT JOIN datastore_types dst ON dst.id = ds.datastore_type_id
+    LEFT JOIN datacenters dc ON dc.id = ds.datacenter_id;
 
 -- =============================================================================
 -- VM NICS VIEW
 -- =============================================================================
 CREATE
-OR REPLACE VIEW core.vw_vm_nics AS
+OR REPLACE VIEW vw_vm_nics AS
 SELECT
     vn.id AS nic_id,
     vn.mac_address,
@@ -168,19 +168,19 @@ SELECT
     n.virtual_switch,
     nt.name AS network_type
 FROM
-    core.vm_nics vn
-    LEFT JOIN core.adapter_types at ON at.id = vn.adapter_type_id
-    LEFT JOIN core.vms v ON v.id = vn.vm_id
-    LEFT JOIN core.power_states ps ON ps.id = v.power_state_id
-    LEFT JOIN core.environments e ON e.id = v.environment_id
-    LEFT JOIN core.networks n ON n.id = vn.network_id
-    LEFT JOIN core.network_types nt ON nt.id = n.network_type_id;
+    vm_nics vn
+    LEFT JOIN adapter_types at ON at.id = vn.adapter_type_id
+    LEFT JOIN vms v ON v.id = vn.vm_id
+    LEFT JOIN power_states ps ON ps.id = v.power_state_id
+    LEFT JOIN environments e ON e.id = v.environment_id
+    LEFT JOIN networks n ON n.id = vn.network_id
+    LEFT JOIN network_types nt ON nt.id = n.network_type_id;
 
 -- =============================================================================
 -- VM SNAPSHOTS VIEW
 -- =============================================================================
 CREATE
-OR REPLACE VIEW core.vw_vm_snapshots AS
+OR REPLACE VIEW vw_vm_snapshots AS
 SELECT
     s.id AS snapshot_id,
     s.snapshot_name,
@@ -198,17 +198,17 @@ SELECT
     ps.name AS power_state,
     e.name AS environment
 FROM
-    core.vm_snapshots s
-    LEFT JOIN core.vm_snapshots sp ON sp.id = s.parent_id
-    LEFT JOIN core.vms v ON v.id = s.vm_id
-    LEFT JOIN core.power_states ps ON ps.id = v.power_state_id
-    LEFT JOIN core.environments e ON e.id = v.environment_id;
+    vm_snapshots s
+    LEFT JOIN vm_snapshots sp ON sp.id = s.parent_id
+    LEFT JOIN vms v ON v.id = s.vm_id
+    LEFT JOIN power_states ps ON ps.id = v.power_state_id
+    LEFT JOIN environments e ON e.id = v.environment_id;
 
 -- =============================================================================
 -- DATASTORES VIEW
 -- =============================================================================
 CREATE
-OR REPLACE VIEW core.vw_datastores AS
+OR REPLACE VIEW vw_datastores AS
 SELECT
     ds.id AS datastore_id,
     ds.datastore_name,
@@ -231,20 +231,20 @@ SELECT
         SELECT
             count(*)
         FROM
-            core.datastore_hosts dh
+            datastore_hosts dh
         WHERE
             dh.datastore_id = ds.id
     ) AS mounted_host_count
 FROM
-    core.datastores ds
-    LEFT JOIN core.datastore_types dst ON dst.id = ds.datastore_type_id
-    LEFT JOIN core.datacenters dc ON dc.id = ds.datacenter_id;
+    datastores ds
+    LEFT JOIN datastore_types dst ON dst.id = ds.datastore_type_id
+    LEFT JOIN datacenters dc ON dc.id = ds.datacenter_id;
 
 -- =============================================================================
 -- NETWORKS VIEW
 -- =============================================================================
 CREATE
-OR REPLACE VIEW core.vw_networks AS
+OR REPLACE VIEW vw_networks AS
 SELECT
     n.id AS network_id,
     n.network_name,
@@ -261,7 +261,7 @@ SELECT
         SELECT
             count(*)
         FROM
-            core.network_hosts nh
+            network_hosts nh
         WHERE
             nh.network_id = n.id
     ) AS attached_host_count,
@@ -270,10 +270,10 @@ SELECT
         SELECT
             count(DISTINCT vn.vm_id)
         FROM
-            core.vm_nics vn
+            vm_nics vn
         WHERE
             vn.network_id = n.id
     ) AS attached_vm_count
 FROM
-    core.networks n
-    LEFT JOIN core.network_types nt ON nt.id = n.network_type_id;
+    networks n
+    LEFT JOIN network_types nt ON nt.id = n.network_type_id;

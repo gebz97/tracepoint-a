@@ -1,6 +1,6 @@
-CREATE TABLE core.daemons (
+CREATE TABLE daemons (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    vm_id int NOT NULL REFERENCES core.vms(id),
+    vm_id int NOT NULL REFERENCES vms(id),
     daemon_name varchar(255) NOT NULL,
     start_user varchar(255),
     start_group varchar(255),

@@ -11,7 +11,7 @@ import paramiko as pm
 import psycopg
 from psycopg.rows import dict_row
 
-from init import read_vault
+from helpers.vault import read_vault
 
 logging.basicConfig(
     level=logging.INFO,
@@ -698,7 +698,7 @@ def process_hosts(
 
 def upsert_licenses(cur, license_names: list[str]):
     cur.executemany(
-        "INSERT INTO core.software_licenses (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+        "INSERT INTO software_licenses (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
         [(r,) for r in license_names],
     )
 
@@ -731,17 +731,17 @@ def upsert_packages(cur, pkg_rows: list[dict]) -> dict[str, int]:
 
     cur.execute(
         """
-        INSERT INTO core.software_packages (fullname, name, version, arch, license_id)
+        INSERT INTO software_packages (fullname, name, version, arch, license_id)
         SELECT s.fullname, s.name, s.version, s.arch, l.id
         FROM _stage_packages s
-        LEFT JOIN core.software_licenses l ON l.name = s.license_name
+        LEFT JOIN software_licenses l ON l.name = s.license_name
         ON CONFLICT (fullname) DO UPDATE SET
             version    = EXCLUDED.version,
             arch       = EXCLUDED.arch,
             license_id = EXCLUDED.license_id
         """
     )
-    cur.execute("SELECT id, fullname FROM core.software_packages")
+    cur.execute("SELECT id, fullname FROM software_packages")
     return {r["fullname"]: r["id"] for r in cur.fetchall()}
 
 
@@ -796,7 +796,7 @@ def upsert_vms(cur, results: list[tuple]) -> dict[str, int]:
 
     cur.execute(
         """
-        INSERT INTO core.vms (
+        INSERT INTO vms (
             vm_name, ipv4, shortname, fqdn, kernel,
             cpus, memory_mb, storage_total_gb,
             has_backup, has_dr
@@ -818,7 +818,7 @@ def upsert_vms(cur, results: list[tuple]) -> dict[str, int]:
             has_dr           = EXCLUDED.has_dr
         """
     )
-    cur.execute("SELECT id, ipv4, vm_name FROM core.vms")
+    cur.execute("SELECT id, ipv4, vm_name FROM vms")
     vm_rows = cur.fetchall()
     vm_map = {r["ipv4"]: r["id"] for r in vm_rows}
     vm_map.update({r["vm_name"]: r["id"] for r in vm_rows})
@@ -849,7 +849,7 @@ def upsert_vm_packages(cur, vm_pkg_pairs, vm_map, pkg_map):
 
     cur.execute(
         """
-        DELETE FROM core.vm_packages vp
+        DELETE FROM vm_packages vp
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_packages)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_vm_packages s
@@ -859,7 +859,7 @@ def upsert_vm_packages(cur, vm_pkg_pairs, vm_map, pkg_map):
     )
     cur.execute(
         """
-        INSERT INTO core.vm_packages (vm_id, package_id)
+        INSERT INTO vm_packages (vm_id, package_id)
         SELECT DISTINCT vm_id, package_id FROM _stage_vm_packages
         ON CONFLICT (vm_id, package_id) DO NOTHING
         """
@@ -889,7 +889,7 @@ def upsert_vm_groups(cur, results, vm_map):
 
     cur.execute(
         """
-        DELETE FROM core.vm_groups vg
+        DELETE FROM vm_groups vg
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_groups)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_vm_groups s
@@ -899,7 +899,7 @@ def upsert_vm_groups(cur, results, vm_map):
     )
     cur.execute(
         """
-        INSERT INTO core.vm_groups (vm_id, name, gid, description)
+        INSERT INTO vm_groups (vm_id, name, gid, description)
         SELECT vm_id, name, gid, description FROM _stage_vm_groups
         ON CONFLICT (vm_id, name) DO UPDATE SET
             gid         = EXCLUDED.gid,
@@ -948,7 +948,7 @@ def upsert_vm_users(cur, results, vm_map):
 
     cur.execute(
         """
-        DELETE FROM core.vm_users vu
+        DELETE FROM vm_users vu
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_users)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_vm_users s
@@ -958,7 +958,7 @@ def upsert_vm_users(cur, results, vm_map):
     )
     cur.execute(
         """
-        INSERT INTO core.vm_users (vm_id, name, uid, pgroup, groups, gid, gids, has_sudo, description)
+        INSERT INTO vm_users (vm_id, name, uid, pgroup, groups, gid, gids, has_sudo, description)
         SELECT vm_id, name, uid, pgroup, groups, gid, gids, has_sudo, description
         FROM _stage_vm_users
         ON CONFLICT (vm_id, name) DO UPDATE SET
@@ -1037,7 +1037,7 @@ def upsert_daemons(cur, results, vm_map):
 
     cur.execute(
         """
-        DELETE FROM core.daemons d
+        DELETE FROM daemons d
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_daemons)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_daemons s
@@ -1047,7 +1047,7 @@ def upsert_daemons(cur, results, vm_map):
     )
     cur.execute(
         """
-        INSERT INTO core.daemons (
+        INSERT INTO daemons (
             vm_id, daemon_name, start_user, start_group, unit_file_path,
             service_type, service_state, service_sub_state,
             exec_start, exec_stop, exec_reload,
@@ -1119,7 +1119,7 @@ def upsert_vm_disks(cur, results, vm_map):
 
     cur.execute(
         """
-        DELETE FROM core.vm_disks vd
+        DELETE FROM vm_disks vd
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_disks)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_vm_disks s
@@ -1133,7 +1133,7 @@ def upsert_vm_disks(cur, results, vm_map):
     )
     cur.execute(
         """
-        DELETE FROM core.vm_disks vd
+        DELETE FROM vm_disks vd
         USING _stage_vm_disks s
         WHERE vd.vm_id = s.vm_id
           AND (
@@ -1144,10 +1144,10 @@ def upsert_vm_disks(cur, results, vm_map):
     )
     cur.execute(
         """
-        INSERT INTO core.vm_disks (vm_id, disk_format_id, label, size_gb, disk_path, boot_disk)
+        INSERT INTO vm_disks (vm_id, disk_format_id, label, size_gb, disk_path, boot_disk)
         SELECT s.vm_id, df.id, s.label, s.size_gb, s.disk_path, s.boot_disk
         FROM _stage_vm_disks s
-        LEFT JOIN core.disk_formats df ON df.name = s.disk_format
+        LEFT JOIN disk_formats df ON df.name = s.disk_format
         """
     )
 
@@ -1194,7 +1194,7 @@ def upsert_vm_mounts(cur, results, vm_map):
 
     cur.execute(
         """
-        DELETE FROM core.vm_mounts vm
+        DELETE FROM vm_mounts vm
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_mounts)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_vm_mounts s
@@ -1204,7 +1204,7 @@ def upsert_vm_mounts(cur, results, vm_map):
     )
     cur.execute(
         """
-        INSERT INTO core.vm_mounts (vm_id, mountpoint, source, fstype, opts, status,
+        INSERT INTO vm_mounts (vm_id, mountpoint, source, fstype, opts, status,
             in_fstab, size, used_last_seen, used_pct)
         SELECT vm_id, mountpoint, source, fstype, opts, status, in_fstab, size, used_last_seen, used_pct
         FROM _stage_vm_mounts
@@ -1253,7 +1253,7 @@ def upsert_vm_nics(cur, results, vm_map):
 
     cur.execute(
         """
-        DELETE FROM core.vm_nics vn
+        DELETE FROM vm_nics vn
         WHERE vm_id IN (SELECT DISTINCT vm_id FROM _stage_vm_nics)
           AND NOT EXISTS (
               SELECT 1 FROM _stage_vm_nics s
@@ -1267,7 +1267,7 @@ def upsert_vm_nics(cur, results, vm_map):
     )
     cur.execute(
         """
-        DELETE FROM core.vm_nics vn
+        DELETE FROM vm_nics vn
         USING _stage_vm_nics s
         WHERE vn.vm_id = s.vm_id
           AND (
@@ -1278,7 +1278,7 @@ def upsert_vm_nics(cur, results, vm_map):
     )
     cur.execute(
         """
-        INSERT INTO core.vm_nics (vm_id, network_id, mac_address, ipv4, ipv6, connected)
+        INSERT INTO vm_nics (vm_id, network_id, mac_address, ipv4, ipv6, connected)
         SELECT vm_id, NULL, mac_address, ipv4, ipv6, connected
         FROM _stage_vm_nics
         """

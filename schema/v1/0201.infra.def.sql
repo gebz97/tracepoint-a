@@ -1,7 +1,7 @@
 -- =============================================================================
 -- INFRA TABLES
 -- =============================================================================
-CREATE TABLE core.datacenters (
+CREATE TABLE datacenters (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     datacenter_name varchar(255) NOT NULL UNIQUE,
     location varchar(255) NULL,
@@ -9,10 +9,10 @@ CREATE TABLE core.datacenters (
     metadata jsonb NULL
 );
 
-CREATE TABLE core.clusters (
+CREATE TABLE clusters (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    datacenter_id int NOT NULL REFERENCES core.datacenters(id),
-    cluster_type_id int NULL REFERENCES core.cluster_types(id),
+    datacenter_id int NOT NULL REFERENCES datacenters(id),
+    cluster_type_id int NULL REFERENCES cluster_types(id),
     cluster_name varchar(255) NOT NULL,
     high_availability bool NOT NULL DEFAULT false,
     load_balancing bool NOT NULL DEFAULT false,
@@ -21,12 +21,12 @@ CREATE TABLE core.clusters (
     CONSTRAINT clusters_unique UNIQUE (datacenter_id, cluster_name)
 );
 
-CREATE TABLE core.hypervisor_hosts (
+CREATE TABLE hypervisor_hosts (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    cluster_id int NOT NULL REFERENCES core.clusters(id),
-    hypervisor_type_id int NOT NULL REFERENCES core.hypervisor_types(id),
-    platform_vendor_id int NULL REFERENCES core.platform_vendors(id),
-    status_id int NOT NULL REFERENCES core.host_statuses(id),
+    cluster_id int NOT NULL REFERENCES clusters(id),
+    hypervisor_type_id int NOT NULL REFERENCES hypervisor_types(id),
+    platform_vendor_id int NULL REFERENCES platform_vendors(id),
+    status_id int NOT NULL REFERENCES host_statuses(id),
     hostname varchar(255) NOT NULL UNIQUE,
     ipv4 varchar(55) NOT NULL UNIQUE,
     ipmi_ip varchar(55) NULL,
@@ -43,10 +43,10 @@ CREATE TABLE core.hypervisor_hosts (
     metadata jsonb NULL
 );
 
-CREATE TABLE core.datastores (
+CREATE TABLE datastores (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    datacenter_id int NOT NULL REFERENCES core.datacenters(id),
-    datastore_type_id int NOT NULL REFERENCES core.datastore_types(id),
+    datacenter_id int NOT NULL REFERENCES datacenters(id),
+    datastore_type_id int NOT NULL REFERENCES datastore_types(id),
     datastore_name varchar(255) NOT NULL UNIQUE,
     ds_path varchar(512) NULL,
     total_gb int8 NULL,
@@ -58,17 +58,17 @@ CREATE TABLE core.datastores (
     metadata jsonb NULL
 );
 
-CREATE TABLE core.datastore_hosts (
-    datastore_id int NOT NULL REFERENCES core.datastores(id),
-    host_id int NOT NULL REFERENCES core.hypervisor_hosts(id),
+CREATE TABLE datastore_hosts (
+    datastore_id int NOT NULL REFERENCES datastores(id),
+    host_id int NOT NULL REFERENCES hypervisor_hosts(id),
     mounted_at timestamp NOT NULL DEFAULT now(),
     read_only bool NOT NULL DEFAULT false,
     PRIMARY KEY (datastore_id, host_id)
 );
 
-CREATE TABLE core.networks (
+CREATE TABLE networks (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    network_type_id int NULL REFERENCES core.network_types(id),
+    network_type_id int NULL REFERENCES network_types(id),
     network_name varchar(255) NOT NULL,
     vlan_id int NULL,
     virtual_switch varchar(255) NULL,
@@ -80,16 +80,16 @@ CREATE TABLE core.networks (
     CONSTRAINT networks_unique UNIQUE (network_name, vlan_id)
 );
 
-CREATE TABLE core.network_hosts (
-    network_id int NOT NULL REFERENCES core.networks(id),
-    host_id int NOT NULL REFERENCES core.hypervisor_hosts(id),
+CREATE TABLE network_hosts (
+    network_id int NOT NULL REFERENCES networks(id),
+    host_id int NOT NULL REFERENCES hypervisor_hosts(id),
     PRIMARY KEY (network_id, host_id)
 );
 
-CREATE TABLE core.compute_pools (
+CREATE TABLE compute_pools (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    cluster_id int NOT NULL REFERENCES core.clusters(id),
-    parent_id int NULL REFERENCES core.compute_pools(id),
+    cluster_id int NOT NULL REFERENCES clusters(id),
+    parent_id int NULL REFERENCES compute_pools(id),
     pool_name varchar(255) NOT NULL,
     cpu_shares int NULL,
     cpu_limit_mhz int NULL,
@@ -99,10 +99,10 @@ CREATE TABLE core.compute_pools (
     CONSTRAINT compute_pools_unique UNIQUE (cluster_id, pool_name)
 );
 
-CREATE TABLE core.templates (
+CREATE TABLE templates (
     id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    datastore_id int NULL REFERENCES core.datastores(id),
-    arch_id int NULL REFERENCES core.cpu_archs(id),
+    datastore_id int NULL REFERENCES datastores(id),
+    arch_id int NULL REFERENCES cpu_archs(id),
     template_name varchar(255) NOT NULL UNIQUE,
     distribution varchar(255) NULL,
     os_version varchar(255) NULL,
