@@ -1,4 +1,3 @@
-tracepoint-a, a handy tool to gain visability into your linux infrastructure
 Copyright (C) 2026 gebz97
 
 GNU GENERAL PUBLIC LICENSE
