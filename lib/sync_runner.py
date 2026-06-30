@@ -1,8 +1,6 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import paramiko as pm
-
 from lib.config import get_ssh_settings
 from lib.db import session_scope
 from lib.models import Host
@@ -14,29 +12,25 @@ log = logging.getLogger(__name__)
 def run_sync(
     resource_name: str, collector_fn, model_cls, natural_key_fields: tuple[str, ...]
 ):
-    """
-    collector_fn(client) -> list[dict]  (dicts of model field values, no host_id/staleness)
-    natural_key_fields: tuple of model attribute names used to match existing rows
-    """
     settings = get_ssh_settings()
     max_workers = settings.get("max_workers", 32)
 
     with session_scope() as session:
         hosts = session.query(Host).all()
-        host_data = [(h.id, h.hostname, h.connection) for h in hosts]
+        host_data = [(h.id, h.host) for h in hosts]
 
     results: dict[int, list[dict]] = {}
 
-    def _work(host_id, hostname, connection):
+    def _work(host_id, host):
         try:
-            client = ssh_mod.connect(connection)
+            client = ssh_mod.connect(host)
         except Exception as e:
-            log.error("[%s] SSH connection failed: %s", hostname, e)
+            log.error("[%s] SSH connection failed: %s", host, e)
             return host_id, None
         try:
             return host_id, collector_fn(client)
         except Exception as e:
-            log.error("[%s] %s collection failed: %s", hostname, resource_name, e)
+            log.error("[%s] %s collection failed: %s", host, resource_name, e)
             return host_id, None
         finally:
             client.close()

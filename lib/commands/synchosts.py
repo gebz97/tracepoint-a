@@ -1,16 +1,23 @@
 import csv
 import ipaddress
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import click
 
+from lib.config import get_ssh_settings
 from lib.db import session_scope
 from lib.models import Host
+from lib.collectors import hostinfo
+from lib import ssh as ssh_mod
 
-REQUIRED_COLUMNS = {"hostname", "connection"}
-CORE_COLUMNS = {"hostname", "connection"}
+log = logging.getLogger(__name__)
+
+REQUIRED_COLUMNS = {"host"}
+CORE_COLUMNS = {"host"}
 
 
-def _validate_connection(value: str) -> bool:
+def _validate_host(value: str) -> bool:
     try:
         ipaddress.ip_address(value)
         return True
@@ -22,8 +29,7 @@ def _validate_connection(value: str) -> bool:
 @click.command()
 @click.argument("csv_path", type=click.Path(exists=True, dir_okay=False))
 def synchosts(csv_path):
-    """Load hosts from a CSV file. Required columns: hostname, connection.
-    All other columns are stored in the 'extra' JSONB field."""
+    """Load hosts from CSV, SSH into each, collect host info, upsert into DB."""
     with open(csv_path, newline="") as f:
         reader = csv.DictReader(f)
         if reader.fieldnames is None:
@@ -38,35 +44,54 @@ def synchosts(csv_path):
     errors = []
     parsed = []
     for i, row in enumerate(rows, start=2):
-        hostname = (row.get("hostname") or "").strip()
-        connection = (row.get("connection") or "").strip()
-
-        if not hostname:
-            errors.append(f"line {i}: empty hostname")
+        host = (row.get("host") or "").strip()
+        if not host or not _validate_host(host):
+            errors.append(f"line {i}: invalid host value '{host}'")
             continue
-        if not connection or not _validate_connection(connection):
-            errors.append(f"line {i}: invalid connection value '{connection}'")
-            continue
-
         extra = {
             k: v
             for k, v in row.items()
             if k not in CORE_COLUMNS and v not in (None, "")
         }
-        parsed.append({"hostname": hostname, "connection": connection, "extra": extra})
+        parsed.append({"host": host, "extra": extra})
 
     if errors:
         raise click.ClickException("Validation failed:\n" + "\n".join(errors))
 
-    with session_scope() as session:
-        for entry in parsed:
-            host = (
-                session.query(Host).filter_by(hostname=entry["hostname"]).one_or_none()
-            )
-            if host:
-                host.connection = entry["connection"]
-                host.extra = entry["extra"]
-            else:
-                session.add(Host(**entry))
+    settings = get_ssh_settings()
+    max_workers = settings.get("max_workers", 32)
 
-    click.echo(f"Synced {len(parsed)} hosts.")
+    def _work(entry):
+        host = entry["host"]
+        try:
+            client = ssh_mod.connect(host)
+        except Exception as e:
+            log.error("[%s] SSH connection failed: %s", host, e)
+            return host, entry["extra"], None
+        try:
+            info = hostinfo.collect(client)
+            return host, entry["extra"], info
+        except Exception as e:
+            log.error("[%s] host info collection failed: %s", host, e)
+            return host, entry["extra"], None
+        finally:
+            client.close()
+
+    results = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_work, e) for e in parsed]
+        for future in as_completed(futures):
+            results.append(future.result())
+
+    with session_scope() as session:
+        for host, extra, info in results:
+            obj = session.query(Host).filter_by(host=host).one_or_none()
+            if obj is None:
+                obj = Host(host=host)
+                session.add(obj)
+            obj.extra = extra
+            if info:
+                for k, v in info.items():
+                    setattr(obj, k, v)
+
+    click.echo(f"Synced {len(results)} hosts.")
