@@ -1,0 +1,14 @@
+database:
+  url: "postgresql+psycopg://tpa_user:changeme@localhost:5432/tpa"
+
+ssh:
+  port: 22
+  timeout: 30
+  max_workers: 32
+
+credentials:
+  default:
+    type: pkey
+    username: svc_account
+    key_path: /home/chad/.ssh/id_rsa
+    passphrase: null
