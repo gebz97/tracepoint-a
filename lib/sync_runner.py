@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from lib.config import get_ssh_settings
 from lib.db import session_scope
 from lib.models import Host
+from lib.progress import progress, end as progress_end
 from lib import ssh as ssh_mod
 
 log = logging.getLogger(__name__)
@@ -18,6 +19,11 @@ def run_sync(
     with session_scope() as session:
         hosts = session.query(Host).all()
         host_data = [(h.id, h.host) for h in hosts]
+
+    total = len(host_data)
+    if total == 0:
+        log.info("%s sync: no hosts to process.", resource_name)
+        return
 
     results: dict[int, list[dict]] = {}
 
@@ -35,12 +41,19 @@ def run_sync(
         finally:
             client.close()
 
+    failed = 0
+    done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(_work, *hd) for hd in host_data]
         for future in as_completed(futures):
             host_id, rows = future.result()
-            if rows is not None:
+            done += 1
+            if rows is None:
+                failed += 1
+            else:
                 results[host_id] = rows
+            progress(resource_name, done, total, failed)
+    progress_end(resource_name, total, failed)
 
     with session_scope() as session:
         for host_id, rows in results.items():

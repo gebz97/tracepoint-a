@@ -1,3 +1,7 @@
+# pyrefly: ignore [untyped-import]
+import math
+
+# pyrefly: ignore [untyped-import]
 import paramiko as pm
 
 SYSTEMCTL_SHOW_PROPS = [
@@ -28,15 +32,28 @@ def _parse_usec(val: str) -> int | None:
         return None
     if val.isdigit():
         return int(val) // 1_000_000
-    total = 0
+    total = 0.0
     for part in val.split():
-        if part.endswith("min"):
-            total += int(part[:-3]) * 60
-        elif part.endswith("ms"):
-            total += int(part[:-2]) // 1000
-        elif part.endswith("s"):
-            total += int(part[:-1])
-    return total or None
+        try:
+            if part.endswith("min"):
+                total += float(part[:-3]) * 60
+            elif part.endswith("ms"):
+                total += float(part[:-2]) / 1000
+            elif part.endswith("us"):
+                total += float(part[:-2]) / 1_000_000
+            elif part.endswith("ns"):
+                total += float(part[:-2]) / 1_000_000_000
+            elif part.endswith("h"):
+                total += float(part[:-1]) * 3600
+            elif part.endswith("s"):
+                total += float(part[:-1])
+            else:
+                return None
+        except ValueError:
+            return None
+    if not math.isfinite(total):
+        return None
+    return int(total) or None
 
 
 def _parse_list_prop(val: str) -> list[str]:

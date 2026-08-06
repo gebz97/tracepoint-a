@@ -9,6 +9,7 @@ venv/
 env/
 
 config.yaml
+config.test.yaml
 
 .vscode/
 .idea/

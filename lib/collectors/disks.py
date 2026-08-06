@@ -1,4 +1,5 @@
 import json
+# pyrefly: ignore [untyped-import]
 import paramiko as pm
 
 
@@ -13,17 +14,24 @@ def collect(client: pm.SSHClient) -> list[dict]:
         data = json.loads(raw)
     except json.JSONDecodeError:
         return []
+    if not isinstance(data, dict):
+        return []
 
     disks = []
 
     def walk(devices):
         for dev in devices:
+            if not isinstance(dev, dict):
+                continue
             if dev.get("type") in ("disk", "part"):
                 name = dev.get("name")
                 if not name:
                     continue
                 size_bytes = dev.get("size")
-                size_gb = int(size_bytes) // (1024**3) if size_bytes else 0
+                try:
+                    size_gb = int(size_bytes) // (1024**3) if size_bytes else 0
+                except (TypeError, ValueError):
+                    size_gb = 0
                 mountpoint = dev.get("mountpoint") or ""
                 disks.append(
                     {
@@ -34,8 +42,9 @@ def collect(client: pm.SSHClient) -> list[dict]:
                         "boot_disk": mountpoint in ("/", "/boot", "/boot/efi"),
                     }
                 )
-            if "children" in dev:
-                walk(dev["children"])
+            children = dev.get("children")
+            if isinstance(children, list):
+                walk(children)
 
     walk(data.get("blockdevices", []))
     return disks

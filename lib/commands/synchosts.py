@@ -10,6 +10,7 @@ from lib.config import get_ssh_settings
 from lib.db import session_scope
 from lib.models import Host
 from lib.collectors import hostinfo
+from lib.progress import progress, end as progress_end
 from lib import ssh as ssh_mod
 
 log = logging.getLogger(__name__)
@@ -36,10 +37,10 @@ def _validate_host(value: str) -> bool:
         return True
     except ValueError:
         pass
-    return bool(value) and len(value) <= 255 and " " not in value
+    return bool(value) and len(value) <= 255 and not any(c.isspace() for c in value)
 
 
-def _parse_bool(value: str) -> Optional[bool]:
+def _parse_bool(value: Optional[str]) -> Optional[bool]:
     v = (value or "").strip().lower()
     if not v:
         return None
@@ -119,10 +120,19 @@ def synchosts(csv_path):
             client.close()
 
     results = []
+    total = len(parsed)
+    failed = 0
+    done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(_work, e) for e in parsed]
         for future in as_completed(futures):
-            results.append(future.result())
+            host, extra, props, info = future.result()
+            done += 1
+            if info is None:
+                failed += 1
+            results.append((host, extra, props, info))
+            progress("synchosts", done, total, failed)
+    progress_end("synchosts", total, failed)
 
     with session_scope() as session:
         csv_hosts = set()

@@ -1,3 +1,4 @@
+# pyrefly: ignore [untyped-import]
 import paramiko as pm
 
 RPM_FIELDS = [
@@ -34,7 +35,7 @@ def collect(client: pm.SSHClient) -> list[dict]:
                 "version": data["version"],
                 "release": data["release"],
                 "arch": data["arch"],
-                "license": data.get("license") or None,
+                "license": None if data.get("license") in (None, "", "(none)") else data["license"],
                 "installtime": data.get("installtime") or None,
                 "size": data.get("size") or None,
                 "summary": data.get("summary") or None,
