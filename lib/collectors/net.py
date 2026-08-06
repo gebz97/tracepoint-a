@@ -16,6 +16,9 @@ def collect(client: pm.SSHClient) -> list[dict]:
     for iface in ifaces:
         if iface.get("ifname") == "lo":
             continue
+        mac_address = iface.get("address")
+        if not mac_address:
+            continue
         ipv4 = ipv6 = None
         for addr_info in iface.get("addr_info", []):
             family = addr_info.get("family")
@@ -28,7 +31,7 @@ def collect(client: pm.SSHClient) -> list[dict]:
                 ipv6 = ip
         nics.append(
             {
-                "mac_address": iface.get("address"),
+                "mac_address": mac_address,
                 "ipv4": ipv4,
                 "ipv6": ipv6,
                 "connected": "UP" in iface.get("flags", []),

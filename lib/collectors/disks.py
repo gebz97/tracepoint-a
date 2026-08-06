@@ -19,15 +19,18 @@ def collect(client: pm.SSHClient) -> list[dict]:
     def walk(devices):
         for dev in devices:
             if dev.get("type") in ("disk", "part"):
+                name = dev.get("name")
+                if not name:
+                    continue
                 size_bytes = dev.get("size")
                 size_gb = int(size_bytes) // (1024**3) if size_bytes else 0
                 mountpoint = dev.get("mountpoint") or ""
                 disks.append(
                     {
-                        "disk_path": f"/dev/{dev['name']}" if dev.get("name") else None,
+                        "disk_path": f"/dev/{name}",
                         "size_gb": size_gb,
                         "fstype": dev.get("fstype"),
-                        "label": dev.get("label") or dev.get("name"),
+                        "label": dev.get("label") or name,
                         "boot_disk": mountpoint in ("/", "/boot", "/boot/efi"),
                     }
                 )

@@ -51,6 +51,7 @@ def run_sync(
             seen_keys = set()
 
             for row in rows:
+                row["host_id"] = host_id
                 key = tuple(row.get(f) for f in natural_key_fields)
                 seen_keys.add(key)
                 if key in existing_by_key:
@@ -59,7 +60,7 @@ def run_sync(
                         setattr(obj, k, v)
                     obj.is_stale = False
                 else:
-                    obj = model_cls(host_id=host_id, **row)
+                    obj = model_cls(**row)
                     session.add(obj)
 
             for key, obj in existing_by_key.items():

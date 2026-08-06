@@ -125,16 +125,22 @@ def synchosts(csv_path):
             results.append(future.result())
 
     with session_scope() as session:
+        csv_hosts = set()
         for host, extra, props, info in results:
+            csv_hosts.add(host)
             obj = session.query(Host).filter_by(host=host).one_or_none()
             if obj is None:
                 obj = Host(host=host)
                 session.add(obj)
+            obj.stale = False
             obj.extra = extra
             for k, v in props.items():
                 setattr(obj, k, v)
             if info:
                 for k, v in info.items():
                     setattr(obj, k, v)
+        for obj in session.query(Host).all():
+            if obj.host not in csv_hosts:
+                obj.stale = True
 
     click.echo(f"Synced {len(results)} hosts.")
