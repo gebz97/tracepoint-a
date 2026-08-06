@@ -1,3 +1,4 @@
+# pyrefly: ignore [untyped-import]
 import paramiko as pm
 
 from lib.config import get_credential, get_ssh_settings

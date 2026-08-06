@@ -1,4 +1,6 @@
 import os
+
+# pyrefly: ignore [untyped-import]
 import yaml
 
 _CONFIG_PATH = os.environ.get(

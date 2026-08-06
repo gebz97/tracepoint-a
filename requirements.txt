@@ -1,0 +1,6 @@
+alembic
+click
+paramiko
+psycopg[binary]
+PyYAML
+SQLAlchemy

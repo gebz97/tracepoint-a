@@ -7,7 +7,24 @@ from lib.db import session_scope
 from lib.models import Host, Disk, Nic, Mount, Group, User, Daemon, Package
 
 REPORTS = {
-    "hosts": (Host, ["id", "host", "extra"]),
+    "hosts": (
+        Host,
+        [
+            "id",
+            "host",
+            "environment",
+            "service",
+            "function",
+            "role",
+            "sequence",
+            "owner",
+            "description",
+            "patching_group",
+            "has_dr",
+            "dr_method",
+            "extra",
+        ],
+    ),
     "disks": (
         Disk,
         [

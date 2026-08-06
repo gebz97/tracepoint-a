@@ -1,3 +1,4 @@
+# pyrefly: ignore [untyped-import]
 import paramiko as pm
 
 IGNORED_FSTYPES = {
