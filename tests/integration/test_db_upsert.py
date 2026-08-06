@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 
 import pytest
+
+# pyrefly: ignore [untyped-import]
 import yaml
 from click.testing import CliRunner
 
@@ -17,6 +19,7 @@ def _test_database_url() -> str:
         return env
     with open(_TEST_CONFIG) as f:
         return yaml.safe_load(f)["database"]["url"]
+
 
 from lib.config import load_config
 from lib.db import get_engine, get_sessionmaker, session_scope
@@ -151,14 +154,20 @@ def test_synchosts_upserts_hosts_on_real_db(monkeypatch, pg, tmp_path):
         def close(self):
             pass
 
-    monkeypatch.setattr("lib.commands.synchosts.ssh_mod.connect", lambda h: _FakeClient())
-    monkeypatch.setattr("lib.commands.synchosts.get_ssh_settings", lambda: {"max_workers": 4})
+    monkeypatch.setattr(
+        "lib.commands.synchosts.ssh_mod.connect", lambda h: _FakeClient()
+    )
+    monkeypatch.setattr(
+        "lib.commands.synchosts.get_ssh_settings", lambda: {"max_workers": 4}
+    )
 
     csv_path = tmp_path / "hosts.csv"
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["host", "environment", "has_dr"])
         writer.writeheader()
-        writer.writerow({"host": "web01.example.com", "environment": "prod", "has_dr": "yes"})
+        writer.writerow(
+            {"host": "web01.example.com", "environment": "prod", "has_dr": "yes"}
+        )
 
     result = CliRunner().invoke(synchosts, [str(csv_path)])
     assert result.exit_code == 0
