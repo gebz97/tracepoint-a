@@ -1,4 +1,7 @@
 # pyrefly: ignore [untyped-import]
+import contextlib
+import os
+
 import paramiko as pm
 
 from lib.config import get_credential, get_ssh_settings
@@ -14,6 +17,7 @@ def connect(connection: str) -> pm.SSHClient:
     kwargs = {
         "port": settings.get("port", 22),
         "timeout": settings.get("timeout", 30),
+        "banner_timeout": settings.get("banner_timeout", 10),
         "username": cred["username"],
     }
 
@@ -26,5 +30,6 @@ def connect(connection: str) -> pm.SSHClient:
     else:
         raise ValueError(f"unknown credential type: {cred['type']}")
 
-    client.connect(connection, **kwargs)
+    with open(os.devnull, "w") as devnull, contextlib.redirect_stderr(devnull):
+        client.connect(connection, **kwargs)
     return client
