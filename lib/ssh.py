@@ -6,6 +6,11 @@ import paramiko as pm
 
 from lib.config import get_credential, get_ssh_settings
 
+# Paramiko's transport thread may dump a traceback to stderr (banner
+# failures) after connect() has returned or raised. Keep the sink open for
+# the process lifetime so late writes never hit a closed file.
+_STDERR_SINK = open(os.devnull, "w")
+
 
 def connect(connection: str) -> pm.SSHClient:
     cred = get_credential("default")
@@ -30,6 +35,6 @@ def connect(connection: str) -> pm.SSHClient:
     else:
         raise ValueError(f"unknown credential type: {cred['type']}")
 
-    with open(os.devnull, "w") as devnull, contextlib.redirect_stderr(devnull):
+    with contextlib.redirect_stderr(_STDERR_SINK):
         client.connect(connection, **kwargs)
     return client
