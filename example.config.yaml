@@ -8,7 +8,8 @@ ssh:
 
 credentials:
   default:
-    type: pkey
-    username: svc_account
-    key_path: /home/chad/.ssh/id_rsa
-    passphrase: null
+    type: userpass
+    username: root
+    password: changeme
+    # key_path: /home/chad/.ssh/id_rsa
+    # passphrase: null
