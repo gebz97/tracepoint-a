@@ -29,8 +29,6 @@ HOSTINFO_RESPONSES = [
     ("MemTotal", b"8388608\n", 0),
     ("lsblk -d -b", b"107374182400\n", 0),
     ("df -B1 --output=used", b"12345\n", 0),
-    ("Security", b"3\n", 0),
-    ("Bug Fix", b"1\n", 0),
 ]
 
 

@@ -218,6 +218,5 @@ def test_fuzz_hostinfo_collect(seed):
         )
         info = hostinfo_c.collect(client)
         assert set(info) <= _model_columns(Host)
-        for field in ("cpus", "memory_mb", "storage_total_gb", "storage_used_gb",
-                      "available_security_fixes", "available_bugfixes"):
+        for field in ("cpus", "memory_mb", "storage_total_gb", "storage_used_gb"):
             assert info[field] is None or isinstance(info[field], int)

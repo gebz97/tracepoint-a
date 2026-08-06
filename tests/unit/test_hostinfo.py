@@ -18,8 +18,6 @@ HOSTINFO_RESPONSES = [
     ("MemTotal", b"16777216\n", 0),
     ("lsblk -d -b", b"250\n", 0),
     ("df -B1 --output=used", b"0\n", 0),
-    ("Security", b"12\n", 0),
-    ("Bug Fix", b"3\n", 0),
 ]
 
 
@@ -38,8 +36,6 @@ def test_collect(fake_client):
     assert info["memory_mb"] == 16384
     assert info["storage_total_gb"] == 250
     assert info["storage_used_gb"] == 0
-    assert info["available_security_fixes"] == 12
-    assert info["available_bugfixes"] == 3
 
 
 def test_collect_handles_missing_values(fake_client):
@@ -53,8 +49,6 @@ def test_collect_handles_missing_values(fake_client):
         ("MemTotal", b"", 0),
         ("lsblk -d -b", b"", 0),
         ("df -B1 --output=used", b"", 0),
-        ("Security", b"", 0),
-        ("Bug Fix", b"", 0),
     ]
     info = collect(fake_client(responses))
     assert info["ipv4"] is None
@@ -65,7 +59,6 @@ def test_collect_handles_missing_values(fake_client):
     assert info["cpus"] is None
     assert info["memory_mb"] is None
     assert info["storage_total_gb"] is None
-    assert info["available_security_fixes"] is None
 
 
 def test_parse_os_release(fake_client):

@@ -43,13 +43,6 @@ def collect(client: pm.SSHClient) -> dict:
         "df -B1 --output=used 2>/dev/null | tail -n +2 | awk '{s+=$1} END {printf \"%d\", s/1024/1024/1024}'",
     )
 
-    sec_raw = _cmd(
-        client, "yum updateinfo summary 2>/dev/null | awk '/Security/{print $1}'"
-    )
-    bug_raw = _cmd(
-        client, "yum updateinfo summary 2>/dev/null | awk '/Bug Fix/{print $1}'"
-    )
-
     return {
         "ipv4": ipv4 or None,
         "shortname": shortname or None,
@@ -68,6 +61,4 @@ def collect(client: pm.SSHClient) -> dict:
         "storage_used_gb": (
             int(storage_used_raw) if storage_used_raw.lstrip("-").isdigit() else None
         ),
-        "available_security_fixes": int(sec_raw) if sec_raw.isdigit() else None,
-        "available_bugfixes": int(bug_raw) if bug_raw.isdigit() else None,
     }

@@ -60,8 +60,6 @@ class Host(Base):
     memory_mb: Mapped[Optional[int]] = mapped_column(BigInteger)
     storage_total_gb: Mapped[Optional[int]] = mapped_column(BigInteger)
     storage_used_gb: Mapped[Optional[int]] = mapped_column(BigInteger)
-    available_security_fixes: Mapped[Optional[int]] = mapped_column(Integer)
-    available_bugfixes: Mapped[Optional[int]] = mapped_column(Integer)
     stale: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
