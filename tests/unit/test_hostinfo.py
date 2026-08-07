@@ -3,6 +3,7 @@ from lib.collectors.hostinfo import collect, _parse_os_release
 OS_RELEASE = (
     b"NAME=\"Rocky Linux\"\n"
     b"VERSION=\"9.5 (Blue Onyx)\"\n"
+    b"VERSION_ID=\"9.5\"\n"
     b"ID=\"rocky\"\n"
     b"ID_LIKE=\"rhel centos fedora\"\n"
     b"PRETTY_NAME=\"Rocky Linux 9.5 (Blue Onyx)\"\n"
@@ -32,6 +33,8 @@ def test_collect(fake_client):
     assert info["os"] == "Rocky Linux 9.5 (Blue Onyx)"
     assert info["os_family"] == "rhel centos fedora"
     assert info["os_distro"] == "rocky"
+    assert info["os_major"] == "9"
+    assert info["os_minor"] == "5"
     assert info["cpus"] == 8
     assert info["memory_mb"] == 16384
     assert info["storage_total_gb"] == 250
@@ -56,6 +59,8 @@ def test_collect_handles_missing_values(fake_client):
     assert info["fqdn"] is None
     assert info["domain"] is None
     assert info["os"] is None
+    assert info["os_major"] is None
+    assert info["os_minor"] is None
     assert info["cpus"] is None
     assert info["memory_mb"] is None
     assert info["storage_total_gb"] is None
@@ -72,6 +77,32 @@ def test_parse_os_release_skips_comments_and_malformed(fake_client):
     raw = "# comment\n\nFOO=\"bar\"\nNOEQUALS\nKEY=\"a=b=c\"\n"
     parsed = _parse_os_release(raw)
     assert parsed == {"FOO": "bar", "KEY": "a=b=c"}
+
+
+def test_parse_os_version_from_os_release(fake_client):
+    from lib.collectors.hostinfo import _parse_os_version
+
+    assert _parse_os_version("9.5") == ("9", "5")
+    assert _parse_os_version("9") == ("9", None)
+    assert _parse_os_version("24.04.2 LTS") == ("24", "04")
+    assert _parse_os_version("") == (None, None)
+    assert _parse_os_version("some-version") == (None, None)
+
+
+def test_collect_falls_back_to_version_without_version_id(fake_client):
+    responses = [
+        (sub, out, code)
+        for sub, out, code in HOSTINFO_RESPONSES
+        if b"VERSION_ID" not in out
+    ]
+    responses[0] = (
+        "/etc/os-release",
+        b'NAME="CentOS"\nVERSION="7 (Core)"\nID="centos"\nPRETTY_NAME="CentOS 7"\n',
+        0,
+    )
+    info = collect(fake_client(responses))
+    assert info["os_major"] == "7"
+    assert info["os_minor"] is None
 
 
 def test_collect_info_keys_are_valid_host_columns(fake_client):

@@ -18,9 +18,27 @@ def _parse_os_release(raw: str) -> dict:
     return fields
 
 
+def _parse_os_version(version: str) -> tuple[str | None, str | None]:
+    for part in version.split():
+        nums = []
+        for chunk in part.split("."):
+            digits = chunk.split("-", 1)[0]
+            if not digits.isdigit():
+                break
+            nums.append(digits)
+        if nums:
+            major = nums[0]
+            minor = nums[1] if len(nums) > 1 else None
+            return major, minor
+    return None, None
+
+
 def collect(client: pm.SSHClient) -> dict:
     os_raw = _cmd(client, "cat /etc/os-release 2>/dev/null")
     os_fields = _parse_os_release(os_raw)
+    os_major, os_minor = _parse_os_version(
+        os_fields.get("VERSION_ID") or os_fields.get("VERSION") or ""
+    )
 
     fqdn = _cmd(client, "hostname -f 2>/dev/null || hostname")
     shortname = _cmd(client, "hostname -s 2>/dev/null || hostname")
@@ -51,6 +69,8 @@ def collect(client: pm.SSHClient) -> dict:
         "os": os_fields.get("PRETTY_NAME"),
         "os_family": os_fields.get("ID_LIKE") or os_fields.get("ID"),
         "os_distro": os_fields.get("ID"),
+        "os_major": os_major,
+        "os_minor": os_minor,
         "kernel_version": _cmd(client, "uname -r") or None,
         "arch": _cmd(client, "uname -m") or None,
         "cpus": int(cpus_raw) if cpus_raw.isdigit() else None,

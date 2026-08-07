@@ -54,6 +54,8 @@ class Host(Base):
     os: Mapped[Optional[str]] = mapped_column(String)
     os_family: Mapped[Optional[str]] = mapped_column(String)
     os_distro: Mapped[Optional[str]] = mapped_column(String)
+    os_major: Mapped[Optional[str]] = mapped_column(String)
+    os_minor: Mapped[Optional[str]] = mapped_column(String)
     kernel_version: Mapped[Optional[str]] = mapped_column(String)
     arch: Mapped[Optional[str]] = mapped_column(String)
     cpus: Mapped[Optional[int]] = mapped_column(Integer)
