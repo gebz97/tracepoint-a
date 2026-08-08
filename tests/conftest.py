@@ -68,6 +68,9 @@ class FakeQuery:
         q.kwargs = kwargs
         return q
 
+    def options(self, *args):
+        return self
+
     def all(self):
         return self.session._all(self)
 

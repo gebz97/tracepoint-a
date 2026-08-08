@@ -10,6 +10,7 @@ from lib.config import get_ssh_settings
 from lib.db import session_scope
 from lib.models import Host
 from lib.collectors import hostinfo
+from lib.collectors import identity
 from lib.progress import progress, end as progress_end
 from lib import ssh as ssh_mod
 
@@ -109,13 +110,21 @@ def synchosts(csv_path):
             client = ssh_mod.connect(host)
         except Exception as e:
             log.error("[%s] SSH connection failed: %s", host, e)
-            return host, entry["extra"], entry["props"], None
+            return host, entry["extra"], entry["props"], None, None
         try:
+            host_uuid = identity.fetch(client)
+            if host_uuid is None:
+                log.error(
+                    "[%s] identity not established (~/.tpa/host-id unreadable or "
+                    "not writable); host not registered",
+                    host,
+                )
+                return host, entry["extra"], entry["props"], None, None
             info = hostinfo.collect(client)
-            return host, entry["extra"], entry["props"], info
+            return host, entry["extra"], entry["props"], info, host_uuid
         except Exception as e:
             log.error("[%s] host info collection failed: %s", host, e)
-            return host, entry["extra"], entry["props"], None
+            return host, entry["extra"], entry["props"], None, None
         finally:
             client.close()
 
@@ -126,26 +135,50 @@ def synchosts(csv_path):
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(_work, e) for e in parsed]
         for future in as_completed(futures):
-            host, extra, props, info = future.result()
+            host, extra, props, info, host_uuid = future.result()
             done += 1
             if info is None:
                 failed += 1
-            results.append((host, extra, props, info))
+            results.append((host, extra, props, info, host_uuid))
             progress("synchosts", done, total, failed)
     progress_end("synchosts", total, failed)
 
     with session_scope() as session:
         csv_hosts = set()
-        for host, extra, props, info in results:
+        identity_failed = 0
+        for host, extra, props, info, host_uuid in results:
             csv_hosts.add(host)
+            if info is not None and host_uuid is None:
+                # Identity could not be established: never register the host.
+                identity_failed += 1
+                continue
             obj = session.query(Host).filter_by(host=host).one_or_none()
+            if obj is None and host_uuid:
+                # Same physical machine already present under another name/IP:
+                # adopt this row instead of creating a duplicate.
+                obj = (
+                    session.query(Host)
+                    .filter_by(machine_id=host_uuid)
+                    .one_or_none()
+                )
+                if obj is not None:
+                    log.warning(
+                        "[%s] already registered as '%s' (uuid %s); "
+                        "merging into existing row",
+                        host,
+                        obj.host,
+                        host_uuid,
+                    )
             if obj is None:
                 obj = Host(host=host)
                 session.add(obj)
+            obj.host = host
             obj.stale = False
             obj.extra = extra
             for k, v in props.items():
                 setattr(obj, k, v)
+            if host_uuid:
+                obj.machine_id = host_uuid
             if info:
                 for k, v in info.items():
                     setattr(obj, k, v)
@@ -154,3 +187,5 @@ def synchosts(csv_path):
                 obj.stale = True
 
     click.echo(f"Synced {len(results)} hosts.")
+    if identity_failed:
+        click.echo(f"{identity_failed} host(s) skipped: identity not established.")

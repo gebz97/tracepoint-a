@@ -4,6 +4,7 @@ import click
 from lib.commands.migrate import migrate
 from lib.commands.synchosts import synchosts
 from lib.commands.sync import (
+    sync,
     syncdisks,
     syncnet,
     syncmounts,
@@ -23,6 +24,7 @@ def cli():
 
 cli.add_command(migrate)
 cli.add_command(synchosts)
+cli.add_command(sync)
 cli.add_command(syncdisks)
 cli.add_command(syncnet)
 cli.add_command(syncmounts)

@@ -1,6 +1,7 @@
 alembic
 click
 paramiko
+powerdrill
 psycopg[binary]
 PyYAML
 SQLAlchemy

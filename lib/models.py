@@ -36,6 +36,7 @@ class Host(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     host: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    machine_id: Mapped[Optional[str]] = mapped_column(String, unique=True)
     ipv4: Mapped[Optional[str]] = mapped_column(String)
     environment: Mapped[Optional[str]] = mapped_column(String)
     service: Mapped[Optional[str]] = mapped_column(String)
@@ -62,6 +63,12 @@ class Host(Base):
     memory_mb: Mapped[Optional[int]] = mapped_column(BigInteger)
     storage_total_gb: Mapped[Optional[int]] = mapped_column(BigInteger)
     storage_used_gb: Mapped[Optional[int]] = mapped_column(BigInteger)
+    foreman_id: Mapped[Optional[int]] = mapped_column(Integer)
+    foreman_registered: Mapped[Optional[bool]] = mapped_column(Boolean)
+    errata_count: Mapped[Optional[int]] = mapped_column(Integer)
+    rhsa_count: Mapped[Optional[int]] = mapped_column(Integer)
+    rhsa_critical: Mapped[Optional[int]] = mapped_column(Integer)
+    rhsa_important: Mapped[Optional[int]] = mapped_column(Integer)
     stale: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -35,3 +35,23 @@ def get_ssh_settings() -> dict:
 def get_database_url() -> str:
     cfg = load_config()
     return cfg["database"]["url"]
+
+
+def get_satellite_settings() -> dict:
+    cfg = load_config()
+    sat = cfg.get("satellite")
+    if not sat:
+        raise KeyError("'satellite' section missing from config")
+    url = sat.get("url")
+    if not url:
+        raise KeyError("'satellite.url' missing from config")
+    return {
+        "url": url,
+        "username": sat.get("username"),
+        "password": sat.get("password"),
+        "api_token": sat.get("token"),
+        "verify_ssl": sat.get("verify_ssl", True),
+        "timeout": sat.get("timeout", 30),
+        "per_page": sat.get("per_page", 100),
+        "max_workers": sat.get("max_workers", 16),
+    }
