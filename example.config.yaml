@@ -1,10 +1,24 @@
 database:
   url: "postgresql+psycopg://tpa_user:changeme@localhost:5432/tpa"
 
+satellite:
+  url: "https://foreman.example.com"
+  username: admin
+  password: adminadmin
+  # token: <api-token>    # alternative to username/password
+  verify_ssl: true
+  # timeout: 30
+  # per_page: 100
+  # max_workers: 16
+
 ssh:
   port: 22
   timeout: 30
   max_workers: 32
+  # credential: default              # name of the credentials entry to use
+  # strict_host_key_checking: new    # true | new | false (see README)
+  # known_hosts_path: ~/.ssh/known_hosts
+  # retries: 1
 
 credentials:
   default:
@@ -13,3 +27,7 @@ credentials:
     password: changeme
     # key_path: /home/chad/.ssh/id_rsa
     # passphrase: null
+  # vault:
+  #   type: userpass
+  #   username: vault_agent
+  #   password: ...

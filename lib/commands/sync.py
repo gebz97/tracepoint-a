@@ -1,11 +1,12 @@
 import click
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # pyrefly: ignore [untyped-import]
 import powerdrill as pdr
 
 from sqlalchemy.orm import selectinload
 
-from lib.sync_runner import run_sync
+from lib.sync_runner import run_sync, run_multi_sync
 from lib.models import Disk, Nic, Mount, Group, User, Daemon, Package, Host
 from lib.collectors import disks as disks_c
 from lib.collectors import net as net_c
@@ -35,21 +36,16 @@ def syncmounts():
     run_sync("mounts", mounts_c.collect, Mount, ("host_id", "mountpoint"))
 
 
-def _collect_users_and_groups(client):
-    groups = users_c.collect_groups(client)
-    return groups
-
-
-def _users_collector(client):
-    groups = users_c.collect_groups(client)
-    return users_c.collect_users(client, groups)
-
-
 @click.command()
 def syncusers():
     """Sync users and groups (with sudo flags) from all hosts."""
-    run_sync("groups", users_c.collect_groups, Group, ("host_id", "name"))
-    run_sync("users", _users_collector, User, ("host_id", "uid"))
+    run_multi_sync(
+        [
+            ("groups", Group, ("host_id", "name")),
+            ("users", User, ("host_id", "uid")),
+        ],
+        users_c.collect_users_and_groups,
+    )
 
 
 @click.command()
@@ -101,42 +97,46 @@ def run_foreman_sync(settings=None, client=None) -> dict:
         max_workers = settings.get("max_workers", 16)
 
         plan, conflicts = foreman_c.match_hosts(sat_hosts, hosts)
+        jobs = [(h.host, plan[h.host]) for h in hosts]
 
-        def _work(h):
-            info = plan[h.host]
+        def _work(host_name, info):
             if info is None:
-                return "absent", None
+                return host_name, "absent", None, None
             if info == foreman_c._CONFLICT:
-                return "keep", None
+                return host_name, "keep", None, None
             try:
-                return "ok", foreman_c.fetch_host_summaries(client, info["id"])
+                counts = foreman_c.fetch_host_summaries(client, info["id"])
+                return host_name, "ok", (info["id"], counts), None
             except Exception as e:
-                log.error("[%s] errata fetch failed: %s", h.host, e)
-                return "error", None
+                return host_name, "error", None, e
 
+        errors = []
         done = 0
         matched = 0
         conflicted = 0
         failed = 0
         results = {}
-        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_work, h): h for h in hosts}
+            futures = [executor.submit(_work, *job) for job in jobs]
             for future in as_completed(futures):
-                h = futures[future]
+                host_name, status, payload, err = future.result()
                 done += 1
-                status, counts = future.result()
                 if status == "ok":
                     matched += 1
-                    results[h.host] = ("ok", plan[h.host]["id"], counts)
+                    results[host_name] = ("ok", payload[0], payload[1])
                 elif status == "absent":
-                    results[h.host] = ("absent", None, None)
+                    results[host_name] = ("absent", None, None)
                 elif status == "keep":
                     conflicted += 1
                 else:
                     failed += 1
+                    errors.append((host_name, err))
                 progress("foreman", done, total, failed)
+
+        progress_end("foreman", total, failed)
+        for host_name, err in errors:
+            log.error("[%s] errata fetch failed: %s", host_name, err)
 
         updated = 0
         absent = 0
@@ -162,7 +162,6 @@ def run_foreman_sync(settings=None, client=None) -> dict:
                 for field in foreman_c.ERRATA_FIELDS:
                     setattr(h, field, counts[field])
                 updated += 1
-        progress_end("foreman", total, failed)
         return {
             "total": total,
             "matched": matched,

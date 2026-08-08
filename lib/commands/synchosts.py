@@ -1,6 +1,7 @@
 import csv
 import ipaddress
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
@@ -32,13 +33,20 @@ CORE_COLUMNS = {
 }
 
 
+_LABEL = r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+_HOSTNAME_RE = re.compile(r"^" + _LABEL + r"(\." + _LABEL + r")*\.?$")
+
+
 def _validate_host(value: str) -> bool:
+    """Accept an IP address or a syntactically valid hostname (RFC 1123)."""
+    if not value or len(value) > 255 or any(c.isspace() for c in value):
+        return False
     try:
         ipaddress.ip_address(value)
         return True
     except ValueError:
         pass
-    return bool(value) and len(value) <= 255 and not any(c.isspace() for c in value)
+    return bool(_HOSTNAME_RE.fullmatch(value))
 
 
 def _parse_bool(value: Optional[str]) -> Optional[bool]:

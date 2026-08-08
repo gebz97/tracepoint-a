@@ -40,6 +40,15 @@ def collect(client: pm.SSHClient) -> dict:
         os_fields.get("VERSION_ID") or os_fields.get("VERSION") or ""
     )
 
+    if not os_minor and os_fields.get("ID") == "debian":
+        # Debian tracks point releases in /etc/debian_version ("13.1",
+        # or "13/trixie" before release); os-release has no minor.
+        debian_major, debian_minor = _parse_os_version(
+            _cmd(client, "cat /etc/debian_version 2>/dev/null").split("/", 1)[0]
+        )
+        os_major = os_major or debian_major
+        os_minor = os_minor or debian_minor
+
     fqdn = _cmd(client, "hostname -f 2>/dev/null || hostname")
     shortname = _cmd(client, "hostname -s 2>/dev/null || hostname")
     domain = _cmd(client, "dnsdomainname 2>/dev/null") or (

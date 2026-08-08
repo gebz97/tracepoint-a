@@ -1,35 +1,15 @@
 # pyrefly: ignore [untyped-import]
+from typing import Tuple
+
 import paramiko as pm
 
 
-def collect_groups(client: pm.SSHClient) -> list[dict]:
-    _, stdout, _ = client.exec_command("cat /etc/group")
-    groups = []
-    for line in stdout:
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = line.split(":")
-        if len(parts) >= 4:
-            groups.append(
-                {
-                    "name": parts[0],
-                    "gid": int(parts[2]) if parts[2].isdigit() else None,
-                }
-            )
-    return groups
-
-
-def collect_users(client: pm.SSHClient, groups: list[dict]) -> list[dict]:
-    gid_to_name = {g["gid"]: g["name"] for g in groups if g["gid"] is not None}
-
-    _, stdout, _ = client.exec_command("cat /etc/passwd")
-    passwd_lines = [l.strip() for l in stdout if l.strip() and not l.startswith("#")]
-
-    _, stdout, _ = client.exec_command("cat /etc/group")
+def _parse_group_lines(lines) -> Tuple[list[dict], dict[str, list[str]], dict[str, list[int]]]:
+    """Parse /etc/group lines once into groups + supplementary memberships."""
+    groups: list[dict] = []
     user_supgroups: dict[str, list[str]] = {}
     user_supgids: dict[str, list[int]] = {}
-    for line in stdout:
+    for line in lines:
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -38,19 +18,21 @@ def collect_users(client: pm.SSHClient, groups: list[dict]) -> list[dict]:
             continue
         gname = parts[0]
         gid = int(parts[2]) if parts[2].isdigit() else None
+        groups.append({"name": gname, "gid": gid})
         for member in filter(None, parts[3].split(",")):
             user_supgroups.setdefault(member, []).append(gname)
             if gid is not None:
                 user_supgids.setdefault(member, []).append(gid)
+    return groups, user_supgroups, user_supgids
 
-    _, stdout, _ = client.exec_command(
-        "getent group sudo wheel 2>/dev/null | awk -F: '{print $4}'"
-    )
-    sudo_users = set()
-    for line in stdout:
-        for u in filter(None, line.strip().split(",")):
-            sudo_users.add(u)
 
+def _build_users(
+    passwd_lines,
+    gid_to_name: dict,
+    user_supgroups: dict[str, list[str]],
+    user_supgids: dict[str, list[int]],
+    sudo_users: set,
+) -> list[dict]:
     users = []
     for line in passwd_lines:
         parts = line.split(":")
@@ -80,3 +62,55 @@ def collect_users(client: pm.SSHClient, groups: list[dict]) -> list[dict]:
             }
         )
     return users
+
+
+def collect_groups(client: pm.SSHClient) -> list[dict]:
+    _, stdout, _ = client.exec_command("cat /etc/group")
+    groups, _, _ = _parse_group_lines(stdout)
+    return groups
+
+
+def collect_users(client: pm.SSHClient, groups: list[dict]) -> list[dict]:
+    gid_to_name = {g["gid"]: g["name"] for g in groups if g["gid"] is not None}
+
+    _, stdout, _ = client.exec_command("cat /etc/passwd")
+    passwd_lines = [l.strip() for l in stdout if l.strip() and not l.startswith("#")]
+
+    _, stdout, _ = client.exec_command("cat /etc/group")
+    _, user_supgroups, user_supgids = _parse_group_lines(stdout)
+
+    _, stdout, _ = client.exec_command(
+        "getent group sudo wheel 2>/dev/null | awk -F: '{print $4}'"
+    )
+    sudo_users = set()
+    for line in stdout:
+        for u in filter(None, line.strip().split(",")):
+            sudo_users.add(u)
+
+    return _build_users(passwd_lines, gid_to_name, user_supgroups, user_supgids, sudo_users)
+
+
+def collect_users_and_groups(client: pm.SSHClient) -> dict[str, list[dict]]:
+    """Collect groups and users over one connection with a single /etc/group read."""
+    _, stdout, _ = client.exec_command("cat /etc/group")
+    groups, user_supgroups, user_supgids = _parse_group_lines(stdout)
+
+    gid_to_name = {g["gid"]: g["name"] for g in groups if g["gid"] is not None}
+
+    _, stdout, _ = client.exec_command("cat /etc/passwd")
+    passwd_lines = [l.strip() for l in stdout if l.strip() and not l.startswith("#")]
+
+    _, stdout, _ = client.exec_command(
+        "getent group sudo wheel 2>/dev/null | awk -F: '{print $4}'"
+    )
+    sudo_users = set()
+    for line in stdout:
+        for u in filter(None, line.strip().split(",")):
+            sudo_users.add(u)
+
+    return {
+        "groups": groups,
+        "users": _build_users(
+            passwd_lines, gid_to_name, user_supgroups, user_supgids, sudo_users
+        ),
+    }

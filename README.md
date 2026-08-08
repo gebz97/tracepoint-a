@@ -28,6 +28,10 @@ ssh:
   port: 22
   timeout: 30
   max_workers: 32
+  credential: default                 # name of the credentials entry to use
+  strict_host_key_checking: new       # true | new | false (see below)
+  # known_hosts_path: ~/.ssh/known_hosts
+  # retries: 1                        # extra connection attempts after the first
 
 credentials:
   default:
@@ -35,11 +39,46 @@ credentials:
     username: svc_account
     key_path: /home/chad/.ssh/id_rsa
     passphrase: null      # or "userpass": password: ...
+  # vault:
+  #   type: userpass
+  #   username: vault_agent
+  #   password: ...
 ```
 
 - `ssh.max_workers` controls the concurrency of parallel host collection.
-- `credentials.default` is the single credential used for all hosts; add more
-  entries under `credentials` as needed (currently only `default` is used).
+- `ssh.credential` selects which `credentials.<name>` entry is used for all hosts
+  (defaults to `default`).
+- `ssh.strict_host_key_checking` controls SSH host key verification:
+  - `new` (default): unknown host keys are accepted once and recorded in
+    `known_hosts_path`, like OpenSSH `StrictHostKeyChecking=accept-new`.
+  - `true`: unknown or changed host keys are rejected with an actionable error
+    (including the expected fingerprint); bootstrap with
+    `ssh-keyscan -p <port> <host> >> ~/.ssh/known_hosts`.
+  - `false`: any host key is accepted without verification (insecure — do not
+    use in production).
+- `ssh.retries` is the number of additional connection attempts after a
+  transient failure (not used for authentication or host key errors).
+
+### Satellite (Foreman) sync
+
+`sync foreman` pulls errata counts from Satellite and stores them on each host.
+The `satellite` block in `config.yaml` configures the connection:
+
+```yaml
+satellite:
+  url: "https://foreman.example.com"
+  username: admin
+  password: adminadmin
+  # token: <api-token>    # alternative to username/password
+  verify_ssl: false       # only if the Satellite cert chain is untrusted
+  # timeout: 30
+  # per_page: 100
+  # max_workers: 16
+```
+
+`verify_ssl: false` disables TLS certificate verification for the Satellite
+API — set it only when the certificate chain cannot be trusted, and prefer
+wiring the Satellite CA into the system trust store instead.
 
 ### Database migrations
 
@@ -99,6 +138,7 @@ python tpa.py syncmounts    # mounts
 python tpa.py syncusers     # users and groups (with sudo flags)
 python tpa.py syncdaemons   # systemd daemons
 python tpa.py syncpkg       # installed packages
+python tpa.py sync foreman  # errata counts from Satellite
 python tpa.py syncall       # all of the above
 ```
 

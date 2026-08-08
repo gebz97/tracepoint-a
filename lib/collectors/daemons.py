@@ -26,6 +26,10 @@ SYSTEMCTL_SHOW_PROPS = [
     "UnitFileState",
 ]
 
+# Cap units per `systemctl show` invocation so the command line stays far
+# below ARG_MAX even on hosts with thousands of units.
+UNIT_CHUNK = 200
+
 
 def _parse_usec(val: str) -> int | None:
     if not val or val in ("0", "infinity"):
@@ -83,23 +87,25 @@ def collect(client: pm.SSHClient) -> list[dict]:
         return []
 
     props_arg = " ".join(f"-p {p}" for p in SYSTEMCTL_SHOW_PROPS)
-    _, stdout, _ = client.exec_command(
-        f"systemctl show {props_arg} --no-pager {' '.join(unit_names)} 2>/dev/null"
-    )
-
-    raw_daemons, current = [], {}
-    for line in stdout:
-        line = line.rstrip("\n")
-        if line == "":
-            if current:
-                raw_daemons.append(current)
-                current = {}
-            continue
-        if "=" in line:
-            k, _, v = line.partition("=")
-            current[k] = v
-    if current:
-        raw_daemons.append(current)
+    raw_daemons = []
+    for i in range(0, len(unit_names), UNIT_CHUNK):
+        chunk = unit_names[i : i + UNIT_CHUNK]
+        _, stdout, _ = client.exec_command(
+            f"systemctl show {props_arg} --no-pager {' '.join(chunk)} 2>/dev/null"
+        )
+        current = {}
+        for line in stdout:
+            line = line.rstrip("\n")
+            if line == "":
+                if current:
+                    raw_daemons.append(current)
+                    current = {}
+                continue
+            if "=" in line:
+                k, _, v = line.partition("=")
+                current[k] = v
+        if current:
+            raw_daemons.append(current)
 
     parsed = []
     for d in raw_daemons:
