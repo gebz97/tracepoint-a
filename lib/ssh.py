@@ -22,9 +22,15 @@ STRICT_TRUE = "true"
 STRICT_NEW = "new"
 STRICT_FALSE = "false"
 
+class HostKeyWarning(pm.SSHException):
+    """Host-key trust/verification condition: a known_hosts or policy problem
+    for the operator to resolve, not a collection failure. Counted as a
+    warning, never as a failed host."""
+
+
 # Failures that a retry cannot fix: wrong credentials or a host key that
 # the policy already rejected are deterministic.
-_NO_RETRY = (pm.AuthenticationException, pm.BadHostKeyException)
+_NO_RETRY = (pm.AuthenticationException, pm.BadHostKeyException, HostKeyWarning)
 
 RETRY_DELAY_SECS = 2.0
 
@@ -55,6 +61,15 @@ def _changed_key_message(hostname: str, path: str, expected_key) -> str:
         f"matches '{path}' (expected {_fingerprint(expected_key)}). If the "
         f"change is legitimate, update known_hosts or set "
         f"ssh.strict_host_key_checking to 'new' or 'false'."
+    )
+
+
+def _malformed_keys_message(hostname: str, path: str) -> str:
+    return (
+        f"SSH host key check failed for '{hostname}': '{path}' contains a "
+        f"known_hosts entry that cannot be parsed (paramiko: InvalidHostKey). "
+        f"Fix or remove the bad line, or set ssh.strict_host_key_checking to "
+        f"'new' or 'false'."
     )
 
 
@@ -93,13 +108,19 @@ def connect(connection: str) -> pm.SSHClient:
         client = pm.SSHClient()
         known_key = None
         if strict != STRICT_FALSE:
-            if os.path.isfile(known_hosts_path):
-                client.load_host_keys(known_hosts_path)
-            known_key = _known_host_key(client, connection, port)
+            try:
+                if os.path.isfile(known_hosts_path):
+                    client.load_host_keys(known_hosts_path)
+                known_key = _known_host_key(client, connection, port)
+            except pm.hostkeys.InvalidHostKey as e:
+                client.close()
+                raise HostKeyWarning(
+                    _malformed_keys_message(connection, known_hosts_path)
+                ) from e
             if known_key is None:
                 if strict == STRICT_TRUE:
                     client.close()
-                    raise pm.SSHException(
+                    raise HostKeyWarning(
                         _missing_key_message(connection, known_hosts_path, port)
                     )
                 client.set_missing_host_key_policy(pm.AutoAddPolicy())
@@ -114,8 +135,13 @@ def connect(connection: str) -> pm.SSHClient:
             return client
         except pm.BadHostKeyException as e:
             client.close()
-            raise pm.SSHException(
+            raise HostKeyWarning(
                 _changed_key_message(connection, known_hosts_path, e.expected_key)
+            ) from e
+        except pm.hostkeys.InvalidHostKey as e:
+            client.close()
+            raise HostKeyWarning(
+                _malformed_keys_message(connection, known_hosts_path)
             ) from e
         except Exception as e:
             client.close()

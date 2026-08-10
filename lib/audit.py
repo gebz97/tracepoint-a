@@ -120,12 +120,19 @@ def audit_run(command: str, args: Optional[dict] = None) -> Generator[AuditRun, 
         _current_run = previous
 
 
-def note_progress_end(label: str, total: int, failed: int) -> None:
+def note_progress_end(
+    label: str, total: int, failed: int, warnings: int = 0
+) -> None:
     """Surface progress.end() counts into the active run; no-op outside one."""
     run = _current_run
     if run is None:
         return
-    run.set_summary(total, failed, f"[{label}] done: {total} hosts | {failed} failed")
+    parts = [f"done: {total} hosts"]
+    if warnings:
+        parts.append(f"{warnings} warning")
+    if failed:
+        parts.append(f"{failed} failed")
+    run.set_summary(total, failed, f"[{label}] " + " | ".join(parts))
 
 
 def record_failures(session: Any, rows: list[dict]) -> None:
@@ -143,6 +150,7 @@ def record_failures(session: Any, rows: list[dict]) -> None:
                 stage=row.get("stage") or "collect",
                 error_type=row.get("error_type") or "Exception",
                 error_message=row.get("error_message") or "",
+                is_warning=bool(row.get("is_warning")),
             )
         )
 

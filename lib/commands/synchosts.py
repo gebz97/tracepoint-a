@@ -15,6 +15,7 @@ from lib.collectors import hostinfo
 from lib.collectors import identity
 from lib.progress import progress, end as progress_end
 from lib import ssh as ssh_mod
+from lib.ssh import HostKeyWarning
 
 log = logging.getLogger(__name__)
 
@@ -145,17 +146,20 @@ def synchosts(csv_path):
     results = []
     total = len(parsed)
     failed = 0
+    warnings = 0
     done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(_work, e) for e in parsed]
         for future in as_completed(futures):
             host, extra, props, info, host_uuid, stage, err = future.result()
             done += 1
-            if info is None:
+            if isinstance(err, HostKeyWarning):
+                warnings += 1
+            elif info is None:
                 failed += 1
             results.append((host, extra, props, info, host_uuid, stage, err))
             progress("synchosts", done, total, failed)
-    progress_end("synchosts", total, failed)
+    progress_end("synchosts", total, failed, warnings)
 
     with session_scope() as session:
         csv_hosts = set()
@@ -207,6 +211,7 @@ def synchosts(csv_path):
                     "stage": stage,
                     "error_type": type(err).__name__,
                     "error_message": str(err),
+                    "is_warning": isinstance(err, HostKeyWarning),
                 }
                 for host, _, _, _, _, stage, err in results
                 if stage is not None

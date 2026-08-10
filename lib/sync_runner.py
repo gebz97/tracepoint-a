@@ -8,6 +8,7 @@ from lib.db import session_scope
 from lib.models import Host
 from lib.progress import progress, end as progress_end
 from lib import ssh as ssh_mod
+from lib.ssh import HostKeyWarning
 
 log = logging.getLogger(__name__)
 
@@ -60,7 +61,9 @@ def _log_errors(
 ) -> None:
     for host_id, kind, err in errors:
         host = host_names.get(host_id, host_id)
-        if kind == "ssh":
+        if kind == "ssh" and isinstance(err, HostKeyWarning):
+            log.warning("[%s] SSH host key warning: %s", host, err)
+        elif kind == "ssh":
             log.error("[%s] SSH connection failed: %s", host, err)
         else:
             log.error("[%s] %s collection failed: %s", host, resource_name, err)
@@ -81,6 +84,7 @@ def _failure_rows(
                 "stage": "ssh_connect" if kind == "ssh" else "collect",
                 "error_type": type(err).__name__,
                 "error_message": str(err),
+                "is_warning": isinstance(err, HostKeyWarning),
             }
         )
     return rows
@@ -119,6 +123,7 @@ def run_sync(
             client.close()
 
     failed = 0
+    warnings = 0
     done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(_work, *hd) for hd in host_data]
@@ -126,12 +131,15 @@ def run_sync(
             host_id, rows, kind, err = future.result()
             done += 1
             if rows is None:
-                failed += 1
+                if isinstance(err, HostKeyWarning):
+                    warnings += 1
+                else:
+                    failed += 1
                 errors.append((host_id, kind, err))
             else:
                 results[host_id] = rows
             progress(resource_name, done, total, failed)
-    progress_end(resource_name, total, failed)
+    progress_end(resource_name, total, failed, warnings)
 
     _log_errors(errors, dict(host_data), resource_name)
 
@@ -189,6 +197,7 @@ def run_multi_sync(
             client.close()
 
     failed = 0
+    warnings = 0
     done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(_work, *hd) for hd in host_data]
@@ -196,13 +205,16 @@ def run_multi_sync(
             host_id, collected, kind, err = future.result()
             done += 1
             if collected is None:
-                failed += 1
+                if isinstance(err, HostKeyWarning):
+                    warnings += 1
+                else:
+                    failed += 1
                 errors.append((host_id, kind, err))
             else:
                 for name in names:
                     results[name][host_id] = collected.get(name) or []
             progress(label, done, total, failed)
-    progress_end(label, total, failed)
+    progress_end(label, total, failed, warnings)
 
     _log_errors(errors, dict(host_data), label)
 

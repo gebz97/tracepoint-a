@@ -147,6 +147,7 @@ REPORTS = {
             "stage",
             "error_type",
             "error_message",
+            "is_warning",
             "occurred_at",
         ],
         {"since": ("occurred_at", "date"), "host": ("host", "str")},
