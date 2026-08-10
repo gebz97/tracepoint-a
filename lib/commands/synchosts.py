@@ -7,6 +7,7 @@ from typing import Optional
 
 import click
 
+from lib import audit
 from lib.config import get_ssh_settings
 from lib.db import session_scope
 from lib.models import Host
@@ -117,22 +118,27 @@ def synchosts(csv_path):
         try:
             client = ssh_mod.connect(host)
         except Exception as e:
-            log.error("[%s] SSH connection failed: %s", host, e)
-            return host, entry["extra"], entry["props"], None, None
+            return host, entry["extra"], entry["props"], None, None, "ssh_connect", e
         try:
             host_uuid = identity.fetch(client)
             if host_uuid is None:
-                log.error(
-                    "[%s] identity not established (~/.tpa/host-id unreadable or "
-                    "not writable); host not registered",
-                    host,
+                msg = (
+                    "identity not established (~/.tpa/host-id unreadable or "
+                    "not writable); host not registered"
                 )
-                return host, entry["extra"], entry["props"], None, None
+                return (
+                    host,
+                    entry["extra"],
+                    entry["props"],
+                    None,
+                    None,
+                    "identity",
+                    RuntimeError(msg),
+                )
             info = hostinfo.collect(client)
-            return host, entry["extra"], entry["props"], info, host_uuid
+            return host, entry["extra"], entry["props"], info, host_uuid, None, None
         except Exception as e:
-            log.error("[%s] host info collection failed: %s", host, e)
-            return host, entry["extra"], entry["props"], None, None
+            return host, entry["extra"], entry["props"], None, None, "collect", e
         finally:
             client.close()
 
@@ -143,22 +149,21 @@ def synchosts(csv_path):
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(_work, e) for e in parsed]
         for future in as_completed(futures):
-            host, extra, props, info, host_uuid = future.result()
+            host, extra, props, info, host_uuid, stage, err = future.result()
             done += 1
             if info is None:
                 failed += 1
-            results.append((host, extra, props, info, host_uuid))
+            results.append((host, extra, props, info, host_uuid, stage, err))
             progress("synchosts", done, total, failed)
     progress_end("synchosts", total, failed)
 
     with session_scope() as session:
         csv_hosts = set()
-        identity_failed = 0
-        for host, extra, props, info, host_uuid in results:
+        host_ids = {}
+        for host, extra, props, info, host_uuid, stage, err in results:
             csv_hosts.add(host)
             if info is not None and host_uuid is None:
                 # Identity could not be established: never register the host.
-                identity_failed += 1
                 continue
             obj = session.query(Host).filter_by(host=host).one_or_none()
             if obj is None and host_uuid:
@@ -190,10 +195,23 @@ def synchosts(csv_path):
             if info:
                 for k, v in info.items():
                     setattr(obj, k, v)
+            host_ids[host] = obj.id
+        session.flush()
+        audit.record_failures(
+            session,
+            [
+                {
+                    "host_id": host_ids.get(host),
+                    "host": host,
+                    "resource": None,
+                    "stage": stage,
+                    "error_type": type(err).__name__,
+                    "error_message": str(err),
+                }
+                for host, _, _, _, _, stage, err in results
+                if stage is not None
+            ],
+        )
         for obj in session.query(Host).all():
             if obj.host not in csv_hosts:
                 obj.stale = True
-
-    click.echo(f"Synced {len(results)} hosts.")
-    if identity_failed:
-        click.echo(f"{identity_failed} host(s) skipped: identity not established.")

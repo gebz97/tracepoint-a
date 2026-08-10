@@ -4,7 +4,7 @@ database:
 satellite:
   url: "https://foreman.example.com"
   username: admin
-  password: adminadmin
+  password: changeme
   # token: <api-token>    # alternative to username/password
   verify_ssl: true
   # timeout: 30

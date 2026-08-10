@@ -2,6 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Optional
 
+from lib import audit
 from lib.config import get_ssh_settings
 from lib.db import session_scope
 from lib.models import Host
@@ -65,6 +66,26 @@ def _log_errors(
             log.error("[%s] %s collection failed: %s", host, resource_name, err)
 
 
+def _failure_rows(
+    errors: list[tuple[int, Optional[str], Optional[Exception]]],
+    host_names: dict[int, str],
+    resource_name: str,
+) -> list[dict]:
+    rows = []
+    for host_id, kind, err in errors:
+        rows.append(
+            {
+                "host_id": host_id,
+                "host": host_names.get(host_id, str(host_id)),
+                "resource": resource_name,
+                "stage": "ssh_connect" if kind == "ssh" else "collect",
+                "error_type": type(err).__name__,
+                "error_message": str(err),
+            }
+        )
+    return rows
+
+
 def run_sync(
     resource_name: str, collector_fn, model_cls, natural_key_fields: tuple[str, ...]
 ):
@@ -116,6 +137,9 @@ def run_sync(
 
     with session_scope() as session:
         _write_back(session, model_cls, natural_key_fields, results)
+        audit.record_failures(
+            session, _failure_rows(errors, dict(host_data), resource_name)
+        )
         log.info("%s sync complete: %d hosts processed.", resource_name, len(results))
 
 
@@ -185,4 +209,5 @@ def run_multi_sync(
     with session_scope() as session:
         for name, model_cls, natural_key_fields in resources:
             _write_back(session, model_cls, natural_key_fields, results[name])
+        audit.record_failures(session, _failure_rows(errors, dict(host_data), label))
         log.info("%s sync complete: %d hosts processed.", label, len(host_data))

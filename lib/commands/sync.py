@@ -1,11 +1,13 @@
 import click
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional
 
 # pyrefly: ignore [untyped-import]
 import powerdrill as pdr
 
 from sqlalchemy.orm import selectinload
 
+from lib import audit
 from lib.sync_runner import run_sync, run_multi_sync
 from lib.models import Disk, Nic, Mount, Group, User, Daemon, Package, Host
 from lib.collectors import disks as disks_c
@@ -115,7 +117,7 @@ def run_foreman_sync(settings=None, client=None) -> dict:
         matched = 0
         conflicted = 0
         failed = 0
-        results = {}
+        results: dict[str, tuple[str, Optional[int], Optional[dict[str, int]]]] = {}
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(_work, *job) for job in jobs]
@@ -124,6 +126,7 @@ def run_foreman_sync(settings=None, client=None) -> dict:
                 done += 1
                 if status == "ok":
                     matched += 1
+                    assert payload is not None
                     results[host_name] = ("ok", payload[0], payload[1])
                 elif status == "absent":
                     results[host_name] = ("absent", None, None)
@@ -162,6 +165,21 @@ def run_foreman_sync(settings=None, client=None) -> dict:
                 for field in foreman_c.ERRATA_FIELDS:
                     setattr(h, field, counts[field])
                 updated += 1
+        host_id_by_name = {h.host: h.id for h in hosts}
+        audit.record_failures(
+            session,
+            [
+                {
+                    "host_id": host_id_by_name.get(host_name),
+                    "host": host_name,
+                    "resource": "foreman",
+                    "stage": "errata_fetch",
+                    "error_type": type(err).__name__,
+                    "error_message": str(err),
+                }
+                for host_name, err in errors
+            ],
+        )
         return {
             "total": total,
             "matched": matched,

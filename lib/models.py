@@ -234,3 +234,51 @@ class Package(Base, StaleMixin):
     summary: Mapped[Optional[str]] = mapped_column(String)
 
     host: Mapped["Host"] = relationship(back_populates="packages")
+
+
+class SyncRun(Base):
+    """One CLI invocation of tpa (audit history)."""
+
+    __tablename__ = "sync_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    command: Mapped[str] = mapped_column(String)
+    args: Mapped[dict] = mapped_column(JSONB, default=dict)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String, default="running")
+    invoked_by: Mapped[str] = mapped_column(String)
+    hostname: Mapped[str] = mapped_column(String)
+    total_hosts: Mapped[Optional[int]] = mapped_column(Integer)
+    failed_hosts: Mapped[Optional[int]] = mapped_column(Integer)
+    exit_message: Mapped[Optional[str]] = mapped_column(Text)
+
+    failures: Mapped[List["SyncFailure"]] = relationship(
+        back_populates="sync_run", cascade="all, delete-orphan"
+    )
+
+
+class SyncFailure(Base):
+    """Structured per-host failure detail tied to the producing sync run."""
+
+    __tablename__ = "sync_failures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sync_run_id: Mapped[int] = mapped_column(
+        ForeignKey("sync_runs.id", ondelete="CASCADE"), index=True
+    )
+    host_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("hosts.id", ondelete="SET NULL"), index=True
+    )
+    host: Mapped[str] = mapped_column(String)
+    resource: Mapped[Optional[str]] = mapped_column(String)
+    stage: Mapped[str] = mapped_column(String)
+    error_type: Mapped[str] = mapped_column(String)
+    error_message: Mapped[str] = mapped_column(Text)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    sync_run: Mapped["SyncRun"] = relationship(back_populates="failures")
